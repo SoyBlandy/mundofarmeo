@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   SiteSettings, Service, CatalogItem, Trade, ChatMessage, User as DBUser, AdminCode, FAQ, News, AdConfiguration 
 } from "./types";
 import { 
   Compass, ShieldCheck, Gamepad2, Coins, User as UserIcon, LogOut, Code, AlertCircle, 
-  ChevronRight, Heart, ExternalLink, Mail, MessageSquare, Newspaper, Lock, Sparkles, Sliders
+  ChevronRight, Heart, ExternalLink, Mail, MessageSquare, Newspaper, Lock, Sparkles, Sliders,
+  Volume2, VolumeX, Link2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -15,10 +16,55 @@ import ServicesShop from "./components/ServicesShop";
 import TradeSystem from "./components/TradeSystem";
 import GlobalChat from "./components/GlobalChat";
 import AdminPanel from "./components/AdminPanel";
+import LinkPage from "./components/LinkPage";
+import OtrosJuegos from "./components/OtrosJuegos";
+
+// High fidelity particle animation background component
+function ParticleOverlay({ effect }: { effect: 'none' | 'stars' | 'snow' | 'fireflies' }) {
+  if (!effect || effect === 'none') return null;
+  const count = effect === 'stars' ? 30 : 20;
+  const particles = Array.from({ length: count });
+
+  return (
+    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+      {particles.map((_, i) => {
+        const left = Math.random() * 100;
+        const size = Math.random() * (effect === 'stars' ? 3 : 5) + 2;
+        const delay = Math.random() * 12;
+        const duration = Math.random() * (effect === 'snow' ? 12 : 10) + (effect === 'snow' ? 10 : 8);
+        const opacity = Math.random() * 0.4 + 0.1;
+
+        let className = "";
+        const style: React.CSSProperties = {
+          left: `${left}%`,
+          width: `${size}px`,
+          height: `${size}px`,
+          opacity,
+          animationDelay: `${delay}s`,
+          animationDuration: `${duration}s`,
+          position: 'absolute',
+        };
+
+        if (effect === 'stars') {
+          className = "bg-white rounded-full animate-particle-stars";
+          style.top = `${Math.random() * 100}%`;
+        } else if (effect === 'snow') {
+          className = "bg-white/70 rounded-full animate-particle-snow";
+          style.top = `-10px`;
+        } else if (effect === 'fireflies') {
+          className = "bg-yellow-400/50 rounded-full blur-[1px] animate-particle-fireflies";
+          style.top = `100%`;
+        }
+
+        return <div key={i} className={className} style={style} />;
+      })}
+    </div>
+  );
+}
 
 export default function App() {
-  // Navigation tabs: "inicio" | "servicios" | "trade" | "chat" | "news_faqs"
-  const [activeTab, setActiveTab] = useState<"inicio" | "servicios" | "trade" | "chat" | "news_faqs">("inicio");
+  // Navigation tabs: "inicio" | "servicios" | "trade" | "chat" | "news_faqs" | "links" | "otros_juegos"
+  const [activeTab, setActiveTab] = useState<"inicio" | "servicios" | "trade" | "chat" | "news_faqs" | "links" | "otros_juegos">("inicio");
 
   // Dynamic state loaded from Express Backend
   const [siteSettings, setSiteSettings] = useState<SiteSettings | null>(null);
@@ -35,12 +81,54 @@ export default function App() {
   // Edit profile picture states
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [editingAvatar, setEditingAvatar] = useState("");
+  const [editingNameColor, setEditingNameColor] = useState("");
 
   // Authentication Drawer/Modal
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showCountryWelcomeModal, setShowCountryWelcomeModal] = useState(false);
+  const [welcomeUserCountry, setWelcomeUserCountry] = useState("");
   const [authUsername, setAuthUsername] = useState("");
+  const [authCountry, setAuthCountry] = useState("🇪🇸 España");
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [authError, setAuthError] = useState("");
+
+  const countriesList = [
+    "🇪🇸 España",
+    "🇨🇴 Colombia",
+    "🇲🇽 México",
+    "🇦🇷 Argentina",
+    "🇻🇪 Venezuela",
+    "🇨🇱 Chile",
+    "🇵🇪 Perú",
+    "🇪🇨 Ecuador",
+    "🇩🇴 República Dominicana",
+    "🇺🇾 Uruguay",
+    "🇵🇷 Puerto Rico",
+    "🇺🇸 Estados Unidos",
+    "🇧🇴 Bolivia",
+    "🇵🇾 Paraguay",
+    "🇨🇷 Costa Rica",
+    "🇵🇦 Panamá",
+    "🇬🇹 Guatemala",
+    "🇭🇳 Honduras",
+    "🇸🇻 El Salvador",
+    "🇳🇮 Nicaragua",
+    "🇨🇺 Cuba",
+    "🇧🇷 Brasil",
+    "🇨🇦 Canadá",
+    "🇵🇹 Portugal",
+    "🇫🇷 Francia",
+    "🇮🇹 Italia",
+    "🇩🇪 Alemania",
+    "🇬🇧 Reino Unido",
+    "🇯🇵 Japón",
+    "🇰🇷 Corea del Sur",
+    "🇨🇳 China",
+    "🇲🇦 Marruecos",
+    "🇦🇩 Andorra",
+    "🇬🇶 Guinea Ecuatorial",
+    "🇵🇭 Filipinas"
+  ];
 
   // Creator/Admin Code input Modal
   const [showAdminCodeModal, setShowAdminCodeModal] = useState(false);
@@ -49,6 +137,10 @@ export default function App() {
 
   // Floating Admin Panel Dock (visible if currentAdmin logged in)
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
+
+  // Dynamic Background Music states
+  const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load everything on mount
   const loadPlatformData = async () => {
@@ -110,6 +202,28 @@ export default function App() {
     }
   }, []);
 
+  // Trigger Admin Join Notification when an Admin enters the chat room
+  useEffect(() => {
+    if (activeTab === "chat" && currentAdmin) {
+      const sessionKey = `has_triggered_join_alert_${currentAdmin.id}`;
+      if (!sessionStorage.getItem(sessionKey)) {
+        fetch("/api/chat/admin-join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ authCode: currentAdmin.code })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.messages) {
+            setChatMessages(data.messages);
+          }
+          sessionStorage.setItem(sessionKey, "true");
+        })
+        .catch(err => console.error("Error posting admin join message:", err));
+      }
+    }
+  }, [activeTab, currentAdmin]);
+
   // Sync fonts dynamically
   useEffect(() => {
     if (!siteSettings) return;
@@ -137,7 +251,10 @@ export default function App() {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: authUsername })
+        body: JSON.stringify({ 
+          username: authUsername,
+          country: authCountry 
+        })
       });
 
       const data = await res.json();
@@ -150,6 +267,13 @@ export default function App() {
       localStorage.setItem("mundofarmeo_user", JSON.stringify(data.user));
       setShowAuthModal(false);
       setAuthUsername("");
+
+      // Trigger country welcome selection/confirmation list on login
+      if (!isRegisterMode) {
+        setWelcomeUserCountry(data.user.country || "🇪🇸 España");
+        setShowCountryWelcomeModal(true);
+      }
+
       loadPlatformData();
     } catch (err: any) {
       setAuthError(err.message || "Error al autenticar.");
@@ -204,7 +328,7 @@ export default function App() {
     loadPlatformData();
   };
 
-  const handleUpdateProfile = async (avatarUrl: string) => {
+  const handleUpdateProfile = async (avatarUrl: string, nameColor?: string, countryCode?: string) => {
     if (!currentUser) return;
     try {
       const res = await fetch("/api/users/update-profile", {
@@ -212,7 +336,9 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: currentUser.id,
-          avatar: avatarUrl
+          avatar: avatarUrl,
+          roleColor: nameColor || undefined,
+          country: countryCode || undefined
         })
       });
       const data = await res.json();
@@ -258,6 +384,70 @@ export default function App() {
 
   return (
     <div className={`min-h-screen flex flex-col justify-between transition-colors duration-500 overflow-x-hidden pb-16 md:pb-0 ${bgStyles[siteSettings.backgroundType]}`} id="mundofarmeo-root">
+      
+      {/* Dynamic Theme and Custom Decorations Overrides */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        body {
+          font-family: "${siteSettings.font || 'Inter'}", sans-serif !important;
+        }
+        
+        .glass-panel {
+          ${siteSettings.cardStyle === 'solid' ? `
+            background: #020202 !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            border: 1px solid rgba(255, 255, 255, 0.05) !important;
+          ` : siteSettings.cardStyle === 'bordered' ? `
+            background: rgba(10, 10, 10, 0.4) !important;
+            backdrop-filter: blur(8px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+          ` : siteSettings.cardStyle === 'futuristic' ? `
+            background: rgba(5, 8, 16, 0.85) !important;
+            backdrop-filter: blur(16px) !important;
+            border: 2px solid ${siteSettings.primaryColor || '#3b82f6'}66 !important;
+            box-shadow: 0 0 15px ${siteSettings.primaryColor || '#3b82f6'}22 !important;
+          ` : `
+            background: rgba(15, 15, 15, 0.7) !important;
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+          `}
+          ${siteSettings.neonGlow ? `
+            box-shadow: 0 0 25px ${siteSettings.primaryColor || '#3b82f6'}22 !important;
+          ` : ''}
+        }
+
+        ${siteSettings.headerStyle === 'cyber' ? `
+          header {
+            border-bottom: 2px solid ${siteSettings.primaryColor || '#3b82f6'}aa !important;
+            box-shadow: 0 4px 20px ${siteSettings.primaryColor || '#3b82f6'}22 !important;
+            background: rgba(5, 5, 5, 0.9) !important;
+          }
+        ` : siteSettings.headerStyle === 'gaming' ? `
+          header {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: inset 0 -15px 30px ${siteSettings.primaryColor || '#3b82f6'}11, 0 5px 15px rgba(0, 0, 0, 0.4) !important;
+            background: rgba(10, 10, 15, 0.85) !important;
+          }
+        ` : `
+          header {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+            background: rgba(0, 0, 0, 0.4) !important;
+          }
+        `}
+      ` }} />
+
+      {/* Dynamic Background Particles */}
+      <ParticleOverlay effect={siteSettings.particleEffect || 'none'} />
+
+      {/* Background audio loop for immersive audio experience */}
+      {siteSettings.musicEnabled && siteSettings.musicUrl && (
+        <audio
+          ref={audioRef}
+          src={siteSettings.musicUrl}
+          loop
+        />
+      )}
       
       {/* Top Banner Advertisement (Global spacing) */}
       <AdBanners ad={ads.top} type="top" />
@@ -333,10 +523,50 @@ export default function App() {
                 >
                   Noticias & FAQ
                 </button>
+                <button
+                  onClick={() => setActiveTab("links")}
+                  className={`px-4 py-2 text-xs font-sans font-medium transition-colors cursor-pointer ${
+                    activeTab === "links" ? "text-blue-400 bg-white/[0.03] rounded-lg" : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  LINK
+                </button>
+                <button
+                  onClick={() => setActiveTab("otros_juegos")}
+                  className={`px-4 py-2 text-xs font-sans font-medium transition-colors cursor-pointer ${
+                    activeTab === "otros_juegos" ? "text-blue-400 bg-white/[0.03] rounded-lg" : "text-white/60 hover:text-white"
+                  }`}
+                >
+                  Otros Juegos
+                </button>
               </nav>
 
               {/* Auth and Admin buttons */}
               <div className="flex items-center gap-3">
+                {/* Music Player Button */}
+                {siteSettings.musicEnabled && (
+                  <button
+                    onClick={() => {
+                      if (audioRef.current) {
+                        if (isMusicPlaying) {
+                          audioRef.current.pause();
+                        } else {
+                          audioRef.current.play().catch(e => console.log("Audio play blocked", e));
+                        }
+                        setIsMusicPlaying(!isMusicPlaying);
+                      }
+                    }}
+                    className={`p-2 rounded-full border border-white/10 transition-all cursor-pointer ${
+                      isMusicPlaying 
+                        ? "bg-blue-600/20 border-blue-500/50 text-blue-400 animate-pulse" 
+                        : "bg-white/[0.03] text-white/50 hover:text-white"
+                    }`}
+                    title={isMusicPlaying ? "Pausar música gamer 🎵" : "Reproducir música gamer 🔇"}
+                  >
+                    {isMusicPlaying ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                  </button>
+                )}
+
                 {currentUser ? (
                   <div className="flex items-center gap-2">
                     <img
@@ -346,6 +576,7 @@ export default function App() {
                       title="Cambiar Foto de Perfil"
                       onClick={() => {
                         setEditingAvatar(currentUser.avatar || "");
+                        setEditingNameColor(currentUser.roleColor || "");
                         setShowEditProfileModal(true);
                       }}
                       referrerPolicy="no-referrer"
@@ -355,6 +586,7 @@ export default function App() {
                       title="Cambiar Foto de Perfil"
                       onClick={() => {
                         setEditingAvatar(currentUser.avatar || "");
+                        setEditingNameColor(currentUser.roleColor || "");
                         setShowEditProfileModal(true);
                       }}
                     >
@@ -603,6 +835,7 @@ export default function App() {
                     }} 
                     onRefreshChat={loadPlatformData} 
                     chatCleanupMinutes={siteSettings.chatCleanupMinutes}
+                    customStickers={siteSettings.chatStickers || []}
                   />
                 </motion.div>
               )}
@@ -616,6 +849,48 @@ export default function App() {
                   exit={{ opacity: 0 }}
                 >
                   <NewsAndFaqs news={siteSettings.news} faqs={siteSettings.faqs} />
+                </motion.div>
+              )}
+
+              {/* TAB 6: LINK & RECOMENDADOS */}
+              {activeTab === "links" && siteSettings && (
+                <motion.div
+                  key="links-tab"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <LinkPage
+                    siteSettings={siteSettings}
+                    currentAdmin={currentAdmin}
+                    onRefreshSettings={loadPlatformData}
+                  />
+                </motion.div>
+              )}
+
+              {/* TAB 7: OTROS JUEGOS DASHBOARD */}
+              {activeTab === "otros_juegos" && siteSettings && (
+                <motion.div
+                  key="otros-juegos-tab"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                >
+                  <OtrosJuegos
+                    trades={trades}
+                    catalog={catalog}
+                    services={services}
+                    currentUser={currentUser}
+                    currentAdmin={currentAdmin}
+                    siteSettings={siteSettings}
+                    onOpenAuth={() => {
+                      setIsRegisterMode(false);
+                      setShowAuthModal(true);
+                    }}
+                    onRefreshTrades={loadPlatformData}
+                    onRefreshServices={loadPlatformData}
+                    onRefreshSettings={loadPlatformData}
+                  />
                 </motion.div>
               )}
 
@@ -766,6 +1041,21 @@ export default function App() {
                   />
                 </div>
 
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-sans text-white/60 font-medium">Selecciona tu País</label>
+                  <select
+                    value={authCountry}
+                    onChange={(e) => setAuthCountry(e.target.value)}
+                    className="w-full glass-input px-3 py-2.5 text-sm bg-slate-900 text-white border border-white/10 rounded-xl focus:border-blue-500 focus:outline-none"
+                  >
+                    {countriesList.map((c) => (
+                      <option key={c} value={c} className="bg-slate-950 text-white">
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <button
                   type="submit"
                   className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-sans font-medium rounded-full hover:scale-102 active:scale-98 transition-all cursor-pointer"
@@ -852,7 +1142,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Edit Profile Picture Modal */}
+      {/* Edit Profile Picture & Color Modal */}
       <AnimatePresence>
         {showEditProfileModal && currentUser && (
           <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -860,7 +1150,7 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="glass-panel w-full max-w-md rounded-2xl p-6 md:p-8 space-y-5 relative shadow-2xl"
+              className="glass-panel w-full max-w-lg rounded-2xl p-6 md:p-8 space-y-5 relative shadow-2xl overflow-y-auto max-h-[90vh]"
             >
               <button
                 onClick={() => setShowEditProfileModal(false)}
@@ -871,58 +1161,140 @@ export default function App() {
 
               <div className="space-y-1">
                 <span className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase font-bold">
-                  Personalización
+                  Personalización Gamer
                 </span>
                 <h3 className="text-xl font-display font-semibold text-white">
-                  Editar Foto de Perfil
+                  Editar Perfil de Farmista
                 </h3>
                 <p className="text-xs text-white/50">
-                  Selecciona uno de nuestros avatares gamer rápidos o ingresa una dirección URL de imagen personalizada.
+                  Sube tu foto, selecciona un avatar gamer o cambia el color de tu nombre en el chat global.
                 </p>
               </div>
 
               {/* Avatar options grid */}
               <div className="space-y-3">
-                <label className="block text-xs font-sans text-white/60 font-medium">Avatares Rápidos (Haz Clic):</label>
-                <div className="grid grid-cols-4 gap-3 bg-zinc-950/40 p-3 rounded-xl border border-white/5">
+                <label className="block text-xs font-sans text-white/60 font-medium">Avatares Rápidos:</label>
+                <div className="grid grid-cols-4 gap-2 bg-zinc-950/40 p-2 rounded-xl border border-white/5">
                   {[
                     { name: "Luffy", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Luffy" },
                     { name: "Zoro", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Zoro" },
                     { name: "Pirate", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Pirate" },
-                    { name: "Alex", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Alex" },
                     { name: "Sophia", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Sophia" },
                     { name: "Gato", url: "https://api.dicebear.com/7.x/bottts/svg?seed=Cat" },
                     { name: "Robot", url: "https://api.dicebear.com/7.x/bottts/svg?seed=Gamer" },
                     { name: "Ninja", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Ninja" },
+                    { name: "Gamer Girl", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Gaming" },
                   ].map((av) => (
                     <button
                       key={av.name}
                       onClick={() => setEditingAvatar(av.url)}
                       className={`relative rounded-xl overflow-hidden border-2 transition-all p-1 bg-zinc-900/60 cursor-pointer ${
-                        editingAvatar === av.url ? "border-emerald-500 scale-105" : "border-transparent hover:border-white/20"
+                        editingAvatar === av.url ? "border-emerald-500 scale-102" : "border-transparent hover:border-white/20"
                       }`}
                       title={av.name}
                     >
-                      <img src={av.url} alt={av.name} className="w-12 h-12 object-contain mx-auto" referrerPolicy="no-referrer" />
+                      <img src={av.url} alt={av.name} className="w-10 h-10 object-contain mx-auto" referrerPolicy="no-referrer" />
                       <div className="text-[8px] text-white/40 text-center mt-1 font-mono uppercase truncate">{av.name}</div>
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Drag and Drop File Upload */}
+              <div className="space-y-2">
+                <label className="block text-xs font-sans text-white/60 font-medium">Subir Foto desde tu PC/Móvil:</label>
+                <div 
+                  className="border-2 border-dashed border-white/10 hover:border-emerald-500/50 bg-white/[0.02] hover:bg-white/[0.04] transition-all rounded-xl p-4 text-center cursor-pointer relative"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        if (typeof reader.result === "string") {
+                          setEditingAvatar(reader.result);
+                        }
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                >
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          if (typeof reader.result === "string") {
+                            setEditingAvatar(reader.result);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                  <div className="text-xs text-white/70">📁 Arrastra tu imagen aquí o haz clic para buscar</div>
+                  <div className="text-[9px] text-white/30 mt-1">Soporta PNG, JPG, GIF (Máx 5MB)</div>
+                </div>
+              </div>
+
               {/* Custom URL Input */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-sans text-white/60 font-medium">O ingresa URL de Imagen Personalizada:</label>
+              <div className="space-y-1">
+                <label className="block text-xs font-sans text-white/60 font-medium">O ingresa enlace de imagen:</label>
                 <input
                   type="url"
                   placeholder="Ej: https://i.imgur.com/imagen.png"
-                  value={editingAvatar}
+                  value={editingAvatar.startsWith("data:") ? "" : editingAvatar}
                   onChange={(e) => setEditingAvatar(e.target.value)}
-                  className="w-full glass-input px-4 py-2 text-xs text-white"
+                  className="w-full glass-input px-3 py-2 text-xs text-white"
                 />
-                <p className="text-[10px] text-white/30">
-                  Admite enlaces de Imgur, Discord, Roblox u otras plataformas.
-                </p>
+              </div>
+
+              {/* Personalización de Color de Nombre (Red featured!) */}
+              <div className="space-y-3 pt-1 border-t border-white/5">
+                <label className="block text-xs font-sans text-white/60 font-medium">Color de tu Nombre en Chat:</label>
+                <div className="grid grid-cols-8 gap-2 bg-zinc-950/40 p-2 rounded-xl border border-white/5">
+                  {[
+                    { hex: "#ef4444", label: "Rojo Fuego" },
+                    { hex: "#ef233c", label: "Crimson" },
+                    { hex: "#3b82f6", label: "Saphire" },
+                    { hex: "#10b981", label: "Esmeralda" },
+                    { hex: "#f59e0b", label: "Dorado" },
+                    { hex: "#ec4899", label: "Rosa Cyber" },
+                    { hex: "#8b5cf6", label: "Violeta" },
+                    { hex: "#ffffff", label: "Blanco" }
+                  ].map((color) => (
+                    <button
+                      key={color.hex}
+                      type="button"
+                      onClick={() => setEditingNameColor(color.hex)}
+                      className={`w-8 h-8 rounded-full border-2 cursor-pointer transition-all ${
+                        editingNameColor === color.hex ? "border-emerald-400 scale-110" : "border-white/10 hover:scale-105"
+                      }`}
+                      style={{ backgroundColor: color.hex }}
+                      title={color.label}
+                    />
+                  ))}
+                </div>
+                
+                <div className="flex gap-2 items-center">
+                  <span className="text-[10px] text-white/50">Personalizado:</span>
+                  <input
+                    type="text"
+                    value={editingNameColor}
+                    onChange={(e) => setEditingNameColor(e.target.value)}
+                    placeholder="#ff5555"
+                    className="w-24 bg-zinc-900 border border-white/10 rounded-lg px-2 py-1 text-[10px] text-white font-mono"
+                  />
+                  <div 
+                    className="w-5 h-5 rounded border border-white/10" 
+                    style={{ backgroundColor: editingNameColor || "#ffffff" }}
+                  />
+                </div>
               </div>
 
               {/* Preview */}
@@ -934,8 +1306,10 @@ export default function App() {
                   referrerPolicy="no-referrer"
                 />
                 <div>
-                  <span className="text-xs font-sans font-semibold text-white block">Vista Previa</span>
-                  <span className="text-[10px] font-mono text-white/40">{currentUser.username}</span>
+                  <span className="text-xs font-sans font-semibold block transition-colors" style={{ color: editingNameColor || "#ffffff" }}>
+                    {currentUser.username}
+                  </span>
+                  <span className="text-[10px] font-mono text-white/40">Vista previa de tu nombre</span>
                 </div>
               </div>
 
@@ -948,12 +1322,74 @@ export default function App() {
                   Cancelar
                 </button>
                 <button
-                  onClick={() => handleUpdateProfile(editingAvatar)}
+                  onClick={() => handleUpdateProfile(editingAvatar, editingNameColor)}
                   className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-sans text-xs font-semibold rounded-full hover:scale-102 active:scale-98 transition-all cursor-pointer"
                 >
                   Guardar Cambios
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Post-Login Country Confirmation List & Welcome Modal */}
+      <AnimatePresence>
+        {showCountryWelcomeModal && currentUser && (
+          <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="glass-panel w-full max-w-md rounded-3xl p-6 md:p-8 space-y-6 relative shadow-2xl text-center"
+            >
+              <div className="w-16 h-16 rounded-full bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 mx-auto animate-bounce">
+                <Compass className="w-8 h-8" />
+              </div>
+
+              <div className="space-y-2">
+                <span className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase font-bold">
+                  Sincronización de Geolocalización
+                </span>
+                <h3 className="text-xl font-display font-bold text-white">
+                  ¡Hola de nuevo, {currentUser.username}! 👋
+                </h3>
+                <p className="text-xs text-white/60">
+                  Por favor, confirma o selecciona de qué país eres en la siguiente lista para ajustar tu bolsa de trade y servidores de farmeo:
+                </p>
+              </div>
+
+              {/* Country Selection Grid */}
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1.5 bg-zinc-950/60 rounded-xl border border-white/5 scrollbar-thin">
+                {countriesList.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setWelcomeUserCountry(c)}
+                    className={`p-2 rounded-lg text-xs font-medium border text-left flex items-center gap-2 transition-all cursor-pointer ${
+                      welcomeUserCountry === c 
+                        ? "bg-blue-600/20 border-blue-500/50 text-blue-400 font-bold" 
+                        : "bg-white/[0.02] border-transparent text-white/70 hover:bg-white/[0.05] hover:text-white"
+                    }`}
+                  >
+                    <span className="text-sm">{c.split(" ")[0]}</span>
+                    <span className="truncate">{c.split(" ").slice(1).join(" ")}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Confirm Button */}
+              <button
+                type="button"
+                onClick={async () => {
+                  // Save updated country on backend
+                  await handleUpdateProfile(currentUser.avatar || "", currentUser.roleColor || "", welcomeUserCountry);
+                  setShowCountryWelcomeModal(false);
+                }}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-sans font-bold text-xs rounded-full transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/20 uppercase tracking-widest"
+              >
+                Confirmar mi País y Entrar 🚀
+              </button>
             </motion.div>
           </div>
         )}
@@ -971,56 +1407,76 @@ export default function App() {
       )}
 
       {/* Mobile Sticky Bottom Navigation Bar */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/90 backdrop-blur-md border-t border-white/10 md:hidden py-2 px-1 flex items-center justify-around shadow-2xl">
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/90 backdrop-blur-md border-t border-white/10 md:hidden py-1.5 px-0.5 flex items-center justify-around shadow-2xl">
         <button
           onClick={() => setActiveTab("inicio")}
-          className={`flex flex-col items-center gap-1.5 py-1 px-3.5 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
+          className={`flex flex-col items-center gap-1 py-1 px-2 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
             activeTab === "inicio" ? "text-blue-400 font-semibold" : "text-white/40"
           }`}
         >
-          <Compass className="w-5 h-5" />
-          <span className="text-[10px] font-sans font-medium tracking-wide">Inicio</span>
+          <Compass className="w-4 h-4" />
+          <span className="text-[9px] font-sans font-medium tracking-wide">Inicio</span>
         </button>
 
         <button
           onClick={() => setActiveTab("servicios")}
-          className={`flex flex-col items-center gap-1.5 py-1 px-3.5 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
+          className={`flex flex-col items-center gap-1 py-1 px-2 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
             activeTab === "servicios" ? "text-blue-400 font-semibold" : "text-white/40"
           }`}
         >
-          <Sparkles className="w-5 h-5" />
-          <span className="text-[10px] font-sans font-medium tracking-wide">Servicios</span>
+          <Sparkles className="w-4 h-4" />
+          <span className="text-[9px] font-sans font-medium tracking-wide">Servicios</span>
         </button>
 
         <button
           onClick={() => setActiveTab("trade")}
-          className={`flex flex-col items-center gap-1.5 py-1 px-3.5 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
+          className={`flex flex-col items-center gap-1 py-1 px-2 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
             activeTab === "trade" ? "text-blue-400 font-semibold" : "text-white/40"
           }`}
         >
-          <Gamepad2 className="w-5 h-5" />
-          <span className="text-[10px] font-sans font-medium tracking-wide">Trades</span>
+          <Gamepad2 className="w-4 h-4" />
+          <span className="text-[9px] font-sans font-medium tracking-wide">Trades</span>
         </button>
 
         <button
           onClick={() => setActiveTab("chat")}
-          className={`flex flex-col items-center gap-1.5 py-1 px-3.5 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg relative ${
+          className={`flex flex-col items-center gap-1 py-1 px-2 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg relative ${
             activeTab === "chat" ? "text-blue-400 font-semibold" : "text-white/40"
           }`}
         >
-          <MessageSquare className="w-5 h-5" />
-          <span className="text-[10px] font-sans font-medium tracking-wide">Chat</span>
-          <span className="absolute top-1 right-3.5 w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+          <MessageSquare className="w-4 h-4" />
+          <span className="text-[9px] font-sans font-medium tracking-wide">Chat</span>
+          <span className="absolute top-1 right-2 w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
         </button>
 
         <button
           onClick={() => setActiveTab("news_faqs")}
-          className={`flex flex-col items-center gap-1.5 py-1 px-3.5 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
+          className={`flex flex-col items-center gap-1 py-1 px-2 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
             activeTab === "news_faqs" ? "text-blue-400 font-semibold" : "text-white/40"
           }`}
         >
-          <Newspaper className="w-5 h-5" />
-          <span className="text-[10px] font-sans font-medium tracking-wide">Noticias</span>
+          <Newspaper className="w-4 h-4" />
+          <span className="text-[9px] font-sans font-medium tracking-wide">Noticias</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("links")}
+          className={`flex flex-col items-center gap-1 py-1 px-2 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
+            activeTab === "links" ? "text-blue-400 font-semibold" : "text-white/40"
+          }`}
+        >
+          <Link2 className="w-4 h-4" />
+          <span className="text-[9px] font-sans font-medium tracking-wide">Links</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("otros_juegos")}
+          className={`flex flex-col items-center gap-1 py-1 px-2 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
+            activeTab === "otros_juegos" ? "text-blue-400 font-semibold" : "text-white/40"
+          }`}
+        >
+          <Gamepad2 className="w-4 h-4 text-emerald-400" />
+          <span className="text-[9px] font-sans font-medium tracking-wide">Otros</span>
         </button>
       </div>
 

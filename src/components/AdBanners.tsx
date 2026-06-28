@@ -18,22 +18,22 @@ export default function AdBanners({ ad, type }: AdProps) {
 
   return (
     <div className={styleClasses[type]} id={`ad-banner-${type}`}>
-      <a href={ad.link} target="_blank" rel="noopener noreferrer" className="block w-full h-full">
+      <div className="block w-full h-full select-none">
         <img 
           src={ad.image} 
           alt={`Anuncio publicitario de MundoFarmeo - ${type}`}
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-102"
           referrerPolicy="no-referrer"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent flex items-end p-2 justify-between">
           <span className="text-[9px] font-mono tracking-widest text-white/40 uppercase bg-black/40 px-2 py-0.5 rounded backdrop-blur-sm">
-            Anuncio
+            Anuncio Patrocinado
           </span>
-          <span className="text-[10px] font-medium text-white/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 mr-2 flex items-center gap-1">
-            Visitar →
+          <span className="text-[10px] font-medium text-white/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 mr-2 flex items-center gap-1">
+            MundoFarmeo ✨
           </span>
         </div>
-      </a>
+      </div>
     </div>
   );
 }

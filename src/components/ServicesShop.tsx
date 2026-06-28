@@ -17,6 +17,15 @@ export default function ServicesShop({ services, currentUser, onOpenAuth }: Prop
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  // Payment states
+  const [paymentMethod, setPaymentMethod] = useState<"paypal" | "card" | "crypto" | "robux">("paypal");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvc, setCardCvc] = useState("");
+  const [cardName, setCardName] = useState("");
+  const [cryptoTxId, setCryptoTxId] = useState("");
+  const [robuxUser, setRobuxUser] = useState("");
+
   const handleOpenRequest = (service: Service) => {
     if (!currentUser) {
       onOpenAuth();
@@ -27,6 +36,13 @@ export default function ServicesShop({ services, currentUser, onOpenAuth }: Prop
     setDetails("");
     setSuccessMessage("");
     setErrorMessage("");
+    setPaymentMethod("paypal");
+    setCardNumber("");
+    setCardExpiry("");
+    setCardCvc("");
+    setCardName("");
+    setCryptoTxId("");
+    setRobuxUser("");
   };
 
   const handleSubmitRequest = async (e: React.FormEvent) => {
@@ -42,6 +58,12 @@ export default function ServicesShop({ services, currentUser, onOpenAuth }: Prop
     setErrorMessage("");
 
     try {
+      const formattedDetails = `${details}\n\n[MÉTODO DE PAGO: ${paymentMethod.toUpperCase()}]${
+        paymentMethod === "card" ? `\n• Tarjeta a nombre de: ${cardName}\n• Terminación: ${cardNumber.slice(-4) || "N/A"}` : ""
+      }${paymentMethod === "crypto" ? `\n• ID de Transacción (TXID): ${cryptoTxId}` : ""}${
+        paymentMethod === "robux" ? `\n• Usuario de Roblox para Fondos: ${robuxUser}` : ""
+      }`;
+
       const response = await fetch("/api/services/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -49,7 +71,7 @@ export default function ServicesShop({ services, currentUser, onOpenAuth }: Prop
           userId: currentUser.id,
           serviceId: selectedService.id,
           discordTag: discordTag,
-          details: details
+          details: formattedDetails
         })
       });
 
@@ -258,11 +280,154 @@ export default function ServicesShop({ services, currentUser, onOpenAuth }: Prop
                       value={discordTag}
                       onChange={(e) => setDiscordTag(e.target.value)}
                       required
-                      className="w-full glass-input px-4 py-2.5 text-sm"
+                      className="w-full glass-input px-4 py-2 text-xs"
                     />
                     <p className="text-[10px] text-white/40">
                       Un moderador te contactará por este medio para iniciar las coordinaciones de pago y acceso.
                     </p>
+                  </div>
+
+                  {/* Payment Method Selector */}
+                  <div className="space-y-2 border-t border-white/5 pt-3">
+                    <label className="block text-xs font-sans text-white/60 font-medium">
+                      Selecciona tu Método de Pago:
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {[
+                        { id: "paypal", label: "PayPal", desc: "📧 Rápido", color: "border-blue-500/30 text-blue-400 bg-blue-500/5" },
+                        { id: "card", label: "Tarjeta", desc: "💳 Visa/MC", color: "border-emerald-500/30 text-emerald-400 bg-emerald-500/5" },
+                        { id: "crypto", label: "Crypto/USDT", desc: "🪙 Binance Pay", color: "border-amber-500/30 text-amber-400 bg-amber-500/5" },
+                        { id: "robux", label: "Robux", desc: "🟥 Roblox", color: "border-rose-500/30 text-rose-400 bg-rose-500/5" },
+                      ].map((method) => (
+                        <button
+                          key={method.id}
+                          type="button"
+                          onClick={() => setPaymentMethod(method.id as any)}
+                          className={`flex flex-col items-center justify-center p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                            paymentMethod === method.id
+                              ? "border-blue-500 bg-blue-600/10 text-white scale-102"
+                              : "border-white/5 hover:border-white/10 text-white/60"
+                          }`}
+                        >
+                          <span className="text-xs font-semibold">{method.label}</span>
+                          <span className="text-[9px] opacity-70 font-mono mt-0.5">{method.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Payment sub-forms */}
+                    <div className="mt-3 bg-zinc-950/50 rounded-xl p-3 border border-white/5 space-y-3">
+                      {paymentMethod === "paypal" && (
+                        <div className="space-y-1 text-xs">
+                          <p className="text-white/80 font-medium">📬 Facturación por PayPal:</p>
+                          <p className="text-white/50 text-[11px] leading-relaxed">
+                            Te enviaremos una solicitud de cobro de PayPal por <span className="text-blue-400 font-mono">${selectedService.price} USD</span> directamente a tu correo tras verificar el pedido.
+                          </p>
+                        </div>
+                      )}
+
+                      {paymentMethod === "card" && (
+                        <div className="space-y-2 text-left">
+                          <p className="text-white/80 text-xs font-medium">💳 Tarjeta de Crédito/Débito:</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="col-span-2 space-y-1">
+                              <label className="text-[9px] text-white/50">Nombre del Titular</label>
+                              <input
+                                type="text"
+                                placeholder="Juan Pérez"
+                                value={cardName}
+                                onChange={(e) => setCardName(e.target.value)}
+                                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-2 py-1 text-xs text-white"
+                                required={paymentMethod === "card"}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[9px] text-white/50">Número de Tarjeta</label>
+                              <input
+                                type="text"
+                                placeholder="4000 1234 5678 9010"
+                                maxLength={19}
+                                value={cardNumber}
+                                onChange={(e) => setCardNumber(e.target.value)}
+                                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-2 py-1 text-xs text-white"
+                                required={paymentMethod === "card"}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-1">
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-white/50">Vence</label>
+                                <input
+                                  type="text"
+                                  placeholder="MM/AA"
+                                  maxLength={5}
+                                  value={cardExpiry}
+                                  onChange={(e) => setCardExpiry(e.target.value)}
+                                  className="w-full bg-zinc-900 border border-white/10 rounded-lg px-2 py-1 text-xs text-white text-center"
+                                  required={paymentMethod === "card"}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-[9px] text-white/50">CVC</label>
+                                <input
+                                  type="password"
+                                  placeholder="123"
+                                  maxLength={4}
+                                  value={cardCvc}
+                                  onChange={(e) => setCardCvc(e.target.value)}
+                                  className="w-full bg-zinc-900 border border-white/10 rounded-lg px-2 py-1 text-xs text-white text-center"
+                                  required={paymentMethod === "card"}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <span className="text-[9px] text-emerald-400/80 block mt-1">🔒 Conexión segura encriptada SSL</span>
+                        </div>
+                      )}
+
+                      {paymentMethod === "crypto" && (
+                        <div className="space-y-2 text-left">
+                          <p className="text-white/80 text-xs font-medium">🪙 Criptomonedas (USDT-TRC20):</p>
+                          <p className="text-[10px] text-white/50 leading-relaxed">
+                            Envía <span className="text-amber-400 font-mono">${selectedService.price} USDT</span> a la siguiente dirección de red TRON:
+                            <br />
+                            <span className="font-mono text-[9px] bg-black px-1.5 py-0.5 rounded text-amber-500 select-all block mt-1 break-all">
+                              TY78gXhK99LmQP23sWvRTx8uNmA90pQrsT
+                            </span>
+                          </p>
+                          <div className="space-y-1 pt-1">
+                            <label className="text-[9px] text-white/50 block">ID de Transacción / TxID:</label>
+                            <input
+                              type="text"
+                              placeholder="Ej: f4b1d6...c92a"
+                              value={cryptoTxId}
+                              onChange={(e) => setCryptoTxId(e.target.value)}
+                              className="w-full bg-zinc-900 border border-white/10 rounded-lg px-2.5 py-1 text-[11px] text-white font-mono"
+                              required={paymentMethod === "crypto"}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {paymentMethod === "robux" && (
+                        <div className="space-y-2 text-left text-xs">
+                          <p className="text-white/80 font-medium">🟥 Pago mediante Robux:</p>
+                          <p className="text-white/50 text-[10px] leading-relaxed">
+                            Aceptamos Robux mediante transferencia de fondos del grupo o pases de juego (Gamepass). Equivalencia de cambio estándar gamer aplicada.
+                          </p>
+                          <div className="space-y-1">
+                            <label className="text-[9px] text-white/50 block">Tu Usuario de Roblox:</label>
+                            <input
+                              type="text"
+                              placeholder="Ej: RobloxGamer_2026"
+                              value={robuxUser}
+                              onChange={(e) => setRobuxUser(e.target.value)}
+                              className="w-full bg-zinc-900 border border-white/10 rounded-lg px-2.5 py-1 text-xs text-white"
+                              required={paymentMethod === "robux"}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Custom description field */}
@@ -274,16 +439,16 @@ export default function ServicesShop({ services, currentUser, onOpenAuth }: Prop
                       placeholder="Ej: Mi nivel actual es 1400. Tengo la fruta Buddha. Quiero subir en menos de 2 días."
                       value={details}
                       onChange={(e) => setDetails(e.target.value)}
-                      rows={3}
-                      className="w-full glass-input px-4 py-2.5 text-sm resize-none"
+                      rows={2}
+                      className="w-full glass-input px-4 py-2.5 text-xs resize-none"
                     />
                   </div>
 
                   {/* Warning banner */}
-                  <div className="bg-zinc-900/60 p-3 rounded-xl border border-white/5 text-[11px] text-white/40 flex gap-2">
+                  <div className="bg-zinc-900/60 p-3 rounded-xl border border-white/5 text-[10px] text-white/40 flex gap-2">
                     <CreditCard className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
                     <span>
-                      Al hacer clic en Confirmar, autorizas registrar esta solicitud. El pago se coordinará externamente. No solicitamos contraseñas en este formulario.
+                      Al hacer clic en Confirmar Pedido, autorizas registrar esta solicitud. El staff verificará tu pago y se comunicará contigo vía Discord.
                     </span>
                   </div>
 

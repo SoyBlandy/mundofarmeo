@@ -43,6 +43,12 @@ const defaultSettings: SiteSettings = {
   policies: "Políticas de MundoFarmeo: Todos los servicios comprados inician en un plazo de 24 horas. Los reembolsos sólo son aplicables si el servicio no ha sido iniciado.",
   contactEmail: "soporte@mundofarmeo.com",
   chatCleanupMinutes: 10,
+  musicEnabled: false,
+  musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+  neonGlow: true,
+  cardStyle: "glass",
+  particleEffect: "stars",
+  headerStyle: "gaming",
   faqs: [
     { id: "faq-1", question: "¿Qué es MundoFarmeo?", answer: "Somos una plataforma líder en ofrecer servicios de farmeo profesionales y seguros, así como un espacio para publicar trades aprobados para Blox Fruits y otros juegos." },
     { id: "faq-2", question: "¿Es seguro comprar en la plataforma?", answer: "Absolutamente. Contamos con un equipo calificado y sistemas seguros para proteger tus cuentas. No compartimos tu información." },
@@ -213,6 +219,7 @@ let db: DBState = {
   services: defaultServices,
   serviceRequests: [],
   chatMessages: defaultChat,
+  adminChatMessages: [],
   ads: defaultAds,
   siteSettings: defaultSettings,
   logs: []
@@ -233,11 +240,34 @@ function loadDatabase() {
         services: parsed.services || defaultServices,
         serviceRequests: parsed.serviceRequests || [],
         chatMessages: parsed.chatMessages || defaultChat,
+        adminChatMessages: parsed.adminChatMessages || [],
         ads: parsed.ads || defaultAds,
         siteSettings: parsed.siteSettings || defaultSettings,
         logs: parsed.logs || []
       };
       
+      // Initialize site settings extensions if missing
+      if (!db.siteSettings.catalogCategories) {
+        db.siteSettings.catalogCategories = ["Frutas", "Espadas", "Accesorios", "Objetos", "Otros"];
+      }
+      if (!db.siteSettings.catalogRarities) {
+        db.siteSettings.catalogRarities = ["Común", "Poco Común", "Rara", "Épica", "Legendaria", "Mítica"];
+      }
+      if (!db.siteSettings.chatStickers) {
+        db.siteSettings.chatStickers = [
+          "https://images.unsplash.com/photo-1614064641938-3bbee52942c7?q=80&w=150",
+          "https://images.unsplash.com/photo-1527324688151-0e627063f2b1?q=80&w=150",
+          "https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=150",
+          "https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=150"
+        ];
+      }
+      if (!db.siteSettings.adminJoinMessage) {
+        db.siteSettings.adminJoinMessage = "👑 ¡Atención! El Administrador [NAME] se ha unido al Chat Global. ¡Saluden con respeto! 👑";
+      }
+      if (!db.siteSettings.linkItems) {
+        db.siteSettings.linkItems = [];
+      }
+
       // Ensure the master code always exists and remains suspended=false
       if (!db.adminCodes.some(c => c.code === "blandygerra2007")) {
         db.adminCodes.push(defaultCodes[0]);
@@ -327,7 +357,7 @@ async function run() {
 
   // 2. AUTHENTICATION & USERS
   app.post("/api/auth/register", (req, res) => {
-    const { username, avatar } = req.body;
+    const { username, avatar, country } = req.body;
     if (!username || username.trim().length < 2) {
       return res.status(400).json({ error: "El nombre de usuario debe tener al menos 2 caracteres." });
     }
@@ -345,11 +375,12 @@ async function run() {
       status: "active",
       warns: 0,
       ipHistory: [req.ip],
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      country: country || undefined
     };
 
     db.users.push(newUser);
-    logAction(newUser.username, req.ip, "REGISTRO_USUARIO", `Nuevo usuario registrado con ID: ${newUser.id}`);
+    logAction(newUser.username, req.ip, "REGISTRO_USUARIO", `Nuevo usuario registrado con ID: ${newUser.id} de país: ${country || "No especificado"}`);
     saveDatabase();
 
     res.json({ success: true, user: newUser });
@@ -522,7 +553,7 @@ async function run() {
   });
 
   app.post("/api/users/update-profile", (req, res) => {
-    const { userId, username, avatar } = req.body;
+    const { userId, username, avatar, country, roleColor } = req.body;
     const user = db.users.find(u => u.id === userId);
     if (!user) {
       return res.status(404).json({ error: "Usuario no encontrado." });
@@ -544,6 +575,16 @@ async function run() {
 
     if (avatar) {
       user.avatar = avatar;
+    }
+
+    if (country) {
+      user.country = country;
+      logAction(user.username, req.ip, "EDITAR_PERFIL", `País actualizado a '${country}'`);
+    }
+
+    if (roleColor) {
+      user.roleColor = roleColor;
+      logAction(user.username, req.ip, "EDITAR_PERFIL", `Color de nombre actualizado a '${roleColor}'`);
     }
 
     saveDatabase();
@@ -964,11 +1005,77 @@ async function run() {
     cleanupExpiredMessages();
     const { userId, authCode, text, sticker, replyTo } = req.body;
 
+    // Handle /color command
+    if (text && text.trim().startsWith("/color ")) {
+      let targetColor = text.replace("/color ", "").trim();
+      const lowerColor = targetColor.toLowerCase();
+      const colorMap: Record<string, string> = {
+        rojo: "#ef4444",
+        red: "#ef4444",
+        azul: "#3b82f6",
+        blue: "#3b82f6",
+        verde: "#22c55e",
+        green: "#22c55e",
+        amarillo: "#eab308",
+        yellow: "#eab308",
+        rosa: "#ec4899",
+        pink: "#ec4899",
+        naranja: "#f97316",
+        orange: "#f97316",
+        morado: "#a855f7",
+        purple: "#a855f7",
+        blanco: "#ffffff",
+        white: "#ffffff",
+        negro: "#09090b",
+        black: "#09090b",
+        cian: "#06b6d4",
+        cyan: "#06b6d4"
+      };
+
+      if (colorMap[lowerColor]) {
+        targetColor = colorMap[lowerColor];
+      }
+
+      if (/^#[0-9a-fA-F]{6}$/.test(targetColor) || /^#[0-9a-fA-F]{3}$/.test(targetColor)) {
+        if (!authCode) {
+          const user = db.users.find(u => u.id === userId);
+          if (user) {
+            user.roleColor = targetColor;
+            saveDatabase();
+            return res.json({ 
+              success: true, 
+              systemMessage: `🎨 ¡Color de chat actualizado a ${targetColor} con éxito!`, 
+              user,
+              messages: db.chatMessages.slice(-100) 
+            });
+          } else {
+            return res.status(404).json({ error: "Usuario no encontrado." });
+          }
+        } else {
+          const admin = db.adminCodes.find(c => c.code === authCode && !c.suspended);
+          if (admin) {
+            admin.roleColor = targetColor;
+            saveDatabase();
+            return res.json({ 
+              success: true, 
+              systemMessage: `🎨 ¡Color del rango actualizado a ${targetColor} con éxito!`, 
+              messages: db.chatMessages.slice(-100) 
+            });
+          } else {
+            return res.status(403).json({ error: "No autorizado." });
+          }
+        }
+      } else {
+        return res.status(400).json({ error: "Formato de color inválido. Usa formato hexadecimal (ej: /color #ff5555) o un nombre como rojo, azul, verde, amarillo, rosa, naranja, morado, blanco." });
+      }
+    }
+
     let senderName = "";
     let senderId = "anonymous";
     let roleBadge = undefined;
     let roleColor = undefined;
     let senderAvatar = undefined;
+    let senderCountry = undefined;
 
     if (authCode) {
       const admin = db.adminCodes.find(c => c.code === authCode && !c.suspended);
@@ -980,6 +1087,7 @@ async function run() {
       roleBadge = admin.roleBadge || (admin.code === "blandygerra2007" ? "Super Admin" : "Administrador");
       roleColor = admin.roleColor || "#3b82f6"; // Primary blue
       senderAvatar = "https://api.dicebear.com/7.x/bottts/svg?seed=" + encodeURIComponent(senderName);
+      senderCountry = "🛠️ Staff";
     } else {
       const user = db.users.find(u => u.id === userId);
       if (!user) {
@@ -1005,6 +1113,7 @@ async function run() {
       roleBadge = user.roleBadge;
       roleColor = user.roleColor;
       senderAvatar = user.avatar;
+      senderCountry = user.country;
     }
 
     if ((!text || text.trim() === "") && !sticker) {
@@ -1034,7 +1143,8 @@ async function run() {
       roleBadge,
       roleColor,
       isStickerOnly: !!(!cleanText && sticker),
-      avatar: senderAvatar
+      avatar: senderAvatar,
+      country: senderCountry
     };
 
     db.chatMessages.push(newMessage);
@@ -1045,6 +1155,213 @@ async function run() {
 
     saveDatabase();
     res.json({ success: true, message: newMessage, messages: db.chatMessages.slice(-100) });
+  });
+
+  app.post("/api/chat/admin-join", (req, res) => {
+    const { authCode } = req.body;
+    const admin = db.adminCodes.find(c => c.code === authCode && !c.suspended);
+    if (!admin) {
+      return res.status(403).json({ error: "Acceso denegado." });
+    }
+
+    const template = db.siteSettings.adminJoinMessage || "👑 ¡Atención! El Administrador [NAME] se ha unido al Chat Global. ¡Saluden con respeto! 👑";
+    const text = template.replace("[NAME]", admin.label).replace("[RANGO]", admin.roleBadge || "Admin");
+
+    const joinMessage: ChatMessage = {
+      id: "chat-system-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5),
+      username: "SISTEMA",
+      userId: "system",
+      text,
+      timestamp: new Date().toISOString(),
+      isPinned: false,
+      roleBadge: "Aviso Staff",
+      roleColor: "#f43f5e",
+      isStickerOnly: false,
+      avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=system",
+      country: "Staff Alert"
+    };
+
+    db.chatMessages.push(joinMessage);
+    if (db.chatMessages.length > 400) {
+      db.chatMessages = db.chatMessages.slice(-400);
+    }
+    saveDatabase();
+    res.json({ success: true, messages: db.chatMessages.slice(-100) });
+  });
+
+  // PRIVATE ADMIN CHAT ENDPOINTS
+  app.get("/api/admin/chat", (req, res) => {
+    const { authCode } = req.query;
+    const admin = db.adminCodes.find(c => c.code === authCode && !c.suspended);
+    if (!admin) {
+      return res.status(403).json({ error: "Acceso privado para administradores." });
+    }
+    if (!db.adminChatMessages) db.adminChatMessages = [];
+    res.json({ success: true, messages: db.adminChatMessages.slice(-100) });
+  });
+
+  app.post("/api/admin/chat", (req, res) => {
+    const { authCode, text } = req.body;
+    const admin = db.adminCodes.find(c => c.code === authCode && !c.suspended);
+    if (!admin) {
+      return res.status(403).json({ error: "No autorizado." });
+    }
+
+    if (!text || text.trim() === "") {
+      return res.status(400).json({ error: "El mensaje no puede estar vacío." });
+    }
+
+    const cleanText = escapeHTML(text.trim());
+    const newAdminMessage: ChatMessage = {
+      id: "admin-chat-" + Date.now() + "-" + Math.random().toString(36).substr(2, 4),
+      username: admin.label,
+      userId: "admin-" + admin.id,
+      text: cleanText,
+      timestamp: new Date().toISOString(),
+      isPinned: false,
+      roleBadge: admin.roleBadge || "Admin",
+      roleColor: admin.roleColor || "#3b82f6",
+      avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=" + encodeURIComponent(admin.label)
+    };
+
+    if (!db.adminChatMessages) db.adminChatMessages = [];
+    db.adminChatMessages.push(newAdminMessage);
+    if (db.adminChatMessages.length > 200) {
+      db.adminChatMessages = db.adminChatMessages.slice(-200);
+    }
+
+    saveDatabase();
+    res.json({ success: true, message: newAdminMessage, messages: db.adminChatMessages.slice(-100) });
+  });
+
+  // DEDICATED COMMAND CONSOLE ENDPOINT
+  app.post("/api/admin/console", (req, res) => {
+    const { authCode, command } = req.body;
+    const admin = db.adminCodes.find(c => c.code === authCode && !c.suspended);
+    if (!admin) {
+      return res.status(403).json({ error: "Acceso denegado. Se requiere firma de administrador válida." });
+    }
+
+    if (!command || !command.startsWith("/")) {
+      return res.status(400).json({ error: "Los comandos deben comenzar con diagonal '/' (Ej: /mute, /ban)." });
+    }
+
+    const parts = command.trim().split(" ");
+    const cmdName = parts[0].toLowerCase();
+    const args = parts.slice(1);
+
+    if (cmdName === "/mute") {
+      const username = args[0];
+      const duration = parseInt(args[1]) || 60;
+      if (!username) return res.status(400).json({ error: "Uso: /mute <usuario> [minutos]" });
+      const user = db.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+      if (!user) return res.status(404).json({ error: `Usuario ${username} no encontrado.` });
+      user.status = "muted";
+      user.muteUntil = new Date(Date.now() + duration * 60 * 1000).toISOString();
+      logAction(admin.label, req.ip, "CONSOLA_MUTE", `Usuario '${user.username}' silenciado por ${duration} minutos.`);
+      saveDatabase();
+      return res.json({ success: true, feedback: `🔊 Usuario @${user.username} silenciado correctamente por ${duration} minutos.` });
+    }
+
+    if (cmdName === "/unmute") {
+      const username = args[0];
+      if (!username) return res.status(400).json({ error: "Uso: /unmute <usuario>" });
+      const user = db.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+      if (!user) return res.status(404).json({ error: `Usuario ${username} no encontrado.` });
+      user.status = "active";
+      user.muteUntil = undefined;
+      logAction(admin.label, req.ip, "CONSOLA_UNMUTE", `Silencio removido para '${user.username}'.`);
+      saveDatabase();
+      return res.json({ success: true, feedback: `🔊 Silencio removido para @${user.username} con éxito.` });
+    }
+
+    if (cmdName === "/ban") {
+      const username = args[0];
+      const reason = args.slice(1).join(" ") || "Infracción de reglas de MundoFarmeo";
+      if (!username) return res.status(400).json({ error: "Uso: /ban <usuario> [motivo]" });
+      const user = db.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+      if (!user) return res.status(404).json({ error: `Usuario ${username} no encontrado.` });
+      user.status = "banned";
+      user.banReason = reason;
+      logAction(admin.label, req.ip, "CONSOLA_BAN", `Usuario '${user.username}' baneado permanentemente. Motivo: ${reason}`);
+      saveDatabase();
+      return res.json({ success: true, feedback: `🚫 Usuario @${user.username} ha sido baneado permanentemente de MundoFarmeo.` });
+    }
+
+    if (cmdName === "/unban") {
+      const username = args[0];
+      if (!username) return res.status(400).json({ error: "Uso: /unban <usuario>" });
+      const user = db.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+      if (!user) return res.status(404).json({ error: `Usuario ${username} no encontrado.` });
+      user.status = "active";
+      user.banReason = undefined;
+      logAction(admin.label, req.ip, "CONSOLA_UNBAN", `Desbaneado usuario '${user.username}'.`);
+      saveDatabase();
+      return res.json({ success: true, feedback: `✅ Usuario @${user.username} desbaneado con éxito.` });
+    }
+
+    if (cmdName === "/clear_chat") {
+      db.chatMessages = [];
+      logAction(admin.label, req.ip, "CONSOLA_CLEAR", "Chat global vaciado por completo.");
+      saveDatabase();
+      return res.json({ success: true, feedback: `🗑️ El chat global ha sido vaciado por completo por el administrador.` });
+    }
+
+    if (cmdName === "/announce") {
+      const message = args.join(" ");
+      if (!message) return res.status(400).json({ error: "Uso: /announce <mensaje>" });
+      const announceMsg: ChatMessage = {
+        id: "announce-" + Date.now(),
+        username: "📢 ANUNCIO DE ADMINISTRACIÓN",
+        userId: "admin-announce",
+        text: message,
+        timestamp: new Date().toISOString(),
+        isPinned: true,
+        roleBadge: "SISTEMA",
+        roleColor: "#f59e0b",
+        avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=SystemAnnouncer"
+      };
+      db.chatMessages.push(announceMsg);
+      logAction(admin.label, req.ip, "CONSOLA_ANNOUNCE", `Anuncio oficial emitido: "${message}"`);
+      saveDatabase();
+      return res.json({ success: true, feedback: `📢 Anuncio transmitido al chat global con éxito: "${message}"` });
+    }
+
+    if (cmdName === "/gift_rank") {
+      const username = args[0];
+      const rank = args[1];
+      const color = args[2] || "#10b981";
+      if (!username || !rank) return res.status(400).json({ error: "Uso: /gift_rank <usuario> <rango> [colorHex]" });
+      const user = db.users.find(u => u.username.toLowerCase() === username.toLowerCase());
+      if (!user) return res.status(404).json({ error: `Usuario ${username} no encontrado.` });
+      user.roleBadge = rank;
+      user.roleColor = color;
+      logAction(admin.label, req.ip, "CONSOLA_GIFT_RANK", `Rango '${rank}' asignado a ${user.username} con color ${color}.`);
+      saveDatabase();
+      return res.json({ success: true, feedback: `⭐ Rango "${rank}" otorgado a @${user.username} correctamente.` });
+    }
+
+    if (cmdName === "/give_all") {
+      const message = args.join(" ");
+      if (!message) return res.status(400).json({ error: "Uso: /give_all <mensaje>" });
+      const rewardMsg: ChatMessage = {
+        id: "reward-" + Date.now(),
+        username: "🎁 REGALO GENERAL",
+        userId: "admin-reward",
+        text: `¡Felicidades! Todos los farmistas han recibido una recompensa. Mensaje: ${message}`,
+        timestamp: new Date().toISOString(),
+        isPinned: false,
+        roleBadge: "EVENTO",
+        roleColor: "#ec4899",
+        avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=GiftBox"
+      };
+      db.chatMessages.push(rewardMsg);
+      logAction(admin.label, req.ip, "CONSOLA_GIVE_ALL", `Recompensa general emitida: "${message}"`);
+      saveDatabase();
+      return res.json({ success: true, feedback: `🎁 Evento de regalo general emitido al chat con éxito.` });
+    }
+
+    return res.status(400).json({ error: `Comando desconocido: ${cmdName}. Comandos válidos: /mute, /unmute, /ban, /unban, /clear_chat, /announce, /gift_rank, /give_all` });
   });
 
   app.put("/api/chat/:id", (req, res) => {

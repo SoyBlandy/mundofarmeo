@@ -14,6 +14,7 @@ interface Props {
   onOpenAuth: () => void;
   onRefreshChat: () => void;
   chatCleanupMinutes?: number;
+  customStickers?: string[];
 }
 
 const DEFAULT_STICKERS = [
@@ -25,7 +26,7 @@ const DEFAULT_STICKERS = [
 ];
 
 export default function GlobalChat({ 
-  messages, currentUser, currentAdmin, onOpenAuth, onRefreshChat, chatCleanupMinutes = 10 
+  messages, currentUser, currentAdmin, onOpenAuth, onRefreshChat, chatCleanupMinutes = 10, customStickers = []
 }: Props) {
   const [inputText, setInputText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -144,17 +145,48 @@ export default function GlobalChat({
     }
   }, [messages, currentUser, currentAdmin]);
 
-  // Poll chat every 3 seconds for persistent real-time chat feel
+  const userJustSentMessage = useRef(false);
+  const isFirstLoad = useRef(true);
+  const prevMessagesLength = useRef(0);
+
+  // Poll chat every 1.5 seconds for persistent real-time chat feel
   useEffect(() => {
     const timer = setInterval(() => {
       onRefreshChat();
-    }, 3000);
+    }, 1500);
     return () => clearInterval(timer);
   }, []);
 
   // Scroll to bottom when messages load or change
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = document.getElementById("chat-messages-container");
+    if (!container) return;
+
+    const scrollOffset = container.scrollHeight - container.scrollTop - container.clientHeight;
+    const isCloseToBottom = scrollOffset < 180;
+    const countChanged = messages.length !== prevMessagesLength.current;
+
+    // Always scroll on first load, or when user just sent a message, or when a new message arrives and user is close to bottom
+    if (isFirstLoad.current || userJustSentMessage.current || (countChanged && isCloseToBottom)) {
+      chatEndRef.current?.scrollIntoView({ behavior: "auto" });
+      container.scrollTop = container.scrollHeight;
+
+      const t = setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+        }
+      }, 100);
+
+      userJustSentMessage.current = false;
+      prevMessagesLength.current = messages.length;
+      isFirstLoad.current = false;
+      return () => clearTimeout(t);
+    }
+
+    // Always keep track of message length even if we didn't scroll
+    prevMessagesLength.current = messages.length;
+    isFirstLoad.current = false;
   }, [messages]);
 
   // Actions permissions
@@ -196,6 +228,7 @@ export default function GlobalChat({
       setInputText("");
       setReplyTarget(null);
       setIsStickerOpen(false);
+      userJustSentMessage.current = true;
       onRefreshChat();
     } catch (err: any) {
       setErrorBanner(err.message || "Error al enviar mensaje.");
@@ -289,7 +322,7 @@ export default function GlobalChat({
     <div className="max-w-5xl mx-auto px-4 py-4" id="global-chat-room">
       
       {/* Outer Discord Container */}
-      <div className="glass-panel rounded-2xl overflow-hidden border border-white/5 flex flex-col h-[480px] sm:h-[650px] shadow-2xl relative">
+      <div className="glass-panel rounded-2xl overflow-hidden border border-white/5 flex flex-col h-[400px] sm:h-[500px] shadow-2xl relative">
         
         {/* Chat Header */}
         <div className="bg-zinc-900/80 px-6 py-4 border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 backdrop-blur-md z-10 relative">
@@ -364,7 +397,7 @@ export default function GlobalChat({
         </div>
 
         {/* Messages Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div id="chat-messages-container" className="flex-1 overflow-y-auto p-6 space-y-4">
           
           {errorBanner && (
             <div className="bg-rose-500/15 border border-rose-500/30 rounded-xl p-3 text-rose-400 text-xs flex items-center gap-2 animate-bounce">
@@ -402,10 +435,19 @@ export default function GlobalChat({
                   <div className="flex-1 min-w-0 space-y-1">
                     
                     {/* Username row */}
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-sans font-semibold text-white text-sm">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span 
+                        className="font-sans font-semibold text-sm transition-colors"
+                        style={{ color: msg.roleColor || '#ffffff' }}
+                      >
                         {msg.username}
                       </span>
+
+                      {msg.country && (
+                        <span className="text-[10px] bg-white/5 border border-white/10 text-white/70 px-1.5 py-0.5 rounded-md font-sans flex items-center gap-1">
+                          {msg.country}
+                        </span>
+                      )}
 
                       {/* Role custom badges */}
                       {msg.roleBadge && (
@@ -578,9 +620,16 @@ export default function GlobalChat({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="absolute bottom-16 left-4 bg-zinc-900 border border-white/10 rounded-xl p-3 grid grid-cols-5 gap-2 shadow-2xl z-20"
+                className="absolute bottom-16 left-4 bg-zinc-900 border border-white/10 rounded-xl p-3 grid grid-cols-5 gap-2 shadow-2xl z-20 max-h-48 overflow-y-auto"
               >
-                {DEFAULT_STICKERS.map((stk) => (
+                {[
+                  ...DEFAULT_STICKERS,
+                  ...(customStickers || []).map((url, idx) => ({
+                    id: `custom-stk-${idx}`,
+                    label: `Sticker Staff ${idx + 1}`,
+                    img: url
+                  }))
+                ].map((stk) => (
                   <button
                     key={stk.id}
                     type="button"

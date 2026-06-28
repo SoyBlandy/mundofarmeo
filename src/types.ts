@@ -29,6 +29,7 @@ export interface User {
   createdAt: string;
   roleBadge?: string;
   roleColor?: string;
+  country?: string; // Flag/country of origin (e.g., "🇪🇸 España")
 }
 
 export interface AdminCode {
@@ -117,6 +118,7 @@ export interface ChatMessage {
   roleColor?: string;
   isStickerOnly?: boolean;
   avatar?: string;
+  country?: string;
 }
 
 export interface AdBanner {
@@ -166,6 +168,19 @@ export interface SiteSettings {
   faqs: FAQ[];
   news: News[];
   chatCleanupMinutes?: number;
+  
+  // Custom decorations
+  musicEnabled?: boolean;
+  musicUrl?: string;
+  neonGlow?: boolean;
+  cardStyle?: 'glass' | 'solid' | 'bordered' | 'futuristic';
+  particleEffect?: 'none' | 'stars' | 'snow' | 'fireflies';
+  headerStyle?: 'minimal' | 'cyber' | 'gaming';
+  catalogCategories?: string[];
+  catalogRarities?: string[];
+  chatStickers?: string[];
+  adminJoinMessage?: string;
+  linkItems?: { id: string; title: string; link: string; images: string[] }[];
 }
 
 export interface SecurityLog {
@@ -185,6 +200,7 @@ export interface DBState {
   services: Service[];
   serviceRequests: ServiceRequest[];
   chatMessages: ChatMessage[];
+  adminChatMessages?: ChatMessage[];
   ads: AdConfiguration;
   siteSettings: SiteSettings;
   logs: SecurityLog[];

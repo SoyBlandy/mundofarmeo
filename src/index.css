@@ -15,11 +15,68 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.neon-glow-active {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
 .glass-panel-light {
   background: rgba(15, 15, 15, 0.5);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Particle effect animation rules */
+@keyframes particle-fall {
+  0% {
+    transform: translateY(-20px) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(105vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+@keyframes rise-float {
+  0% {
+    transform: translateY(105vh) translateX(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.5;
+  }
+  90% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-20px) translateX(30px);
+    opacity: 0;
+  }
+}
+
+.animate-particle-stars {
+  animation: twinkle infinite ease-in-out;
+}
+
+.animate-particle-snow {
+  animation: particle-fall infinite linear;
+}
+
+.animate-particle-fireflies {
+  animation: rise-float infinite linear;
 }
 
 .glass-input {

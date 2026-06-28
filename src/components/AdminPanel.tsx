@@ -6,7 +6,8 @@ import {
 import { 
   Sliders, Users, ShieldAlert, BarChart3, Database, FileText, 
   Settings, Award, RefreshCw, Trash2, Plus, Edit2, Check, CheckCircle2,
-  Lock, Eye, EyeOff, Layout, Globe, Image, Tag, HelpCircle, Key, CheckSquare, X
+  Lock, Eye, EyeOff, Layout, Globe, Image, Tag, HelpCircle, Key, CheckSquare, X,
+  Terminal, MessageSquare
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -24,7 +25,7 @@ export default function AdminPanel({
   siteSettings, ads, services, catalog, trades, currentAdmin, onRefreshAll 
 }: Props) {
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "users" | "services" | "trades" | "ads" | "chat" | "settings" | "logs" | "admins"
+    "dashboard" | "users" | "services" | "trades" | "ads" | "chat" | "settings" | "logs" | "admins" | "console" | "admin_chat"
   >("dashboard");
 
   // Site general states
@@ -62,6 +63,14 @@ export default function AdminPanel({
   const [settingsEmail, setSettingsEmail] = useState(siteSettings.contactEmail);
   const [settingsChatCleanup, setSettingsChatCleanup] = useState(siteSettings.chatCleanupMinutes !== undefined ? siteSettings.chatCleanupMinutes : 10);
 
+  // New decorations
+  const [settingsMusicEnabled, setSettingsMusicEnabled] = useState(!!siteSettings.musicEnabled);
+  const [settingsMusicUrl, setSettingsMusicUrl] = useState(siteSettings.musicUrl || "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3");
+  const [settingsNeonGlow, setSettingsNeonGlow] = useState(siteSettings.neonGlow !== undefined ? !!siteSettings.neonGlow : true);
+  const [settingsCardStyle, setSettingsCardStyle] = useState(siteSettings.cardStyle || "glass");
+  const [settingsParticleEffect, setSettingsParticleEffect] = useState(siteSettings.particleEffect || "stars");
+  const [settingsHeaderStyle, setSettingsHeaderStyle] = useState(siteSettings.headerStyle || "gaming");
+
   // Advertisements state edits
   const [adTopImg, setAdTopImg] = useState(ads.top.image);
   const [adTopLink, setAdTopLink] = useState(ads.top.link);
@@ -81,7 +90,102 @@ export default function AdminPanel({
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
+  // Console lock state
+  const [consoleUnlocked, setConsoleUnlocked] = useState(false);
+  const [consolePasswordInput, setConsolePasswordInput] = useState("");
+  const [consolePasswordError, setConsolePasswordError] = useState("");
+
+  // Console state
+  const [consoleCommand, setConsoleCommand] = useState("");
+  const [consoleLogs, setConsoleLogs] = useState<{ type: "input" | "output" | "error"; text: string; timestamp: string }[]>([
+    { type: "output", text: "⌨️ Terminal de Administración de MundoFarmeo iniciada.", timestamp: new Date().toLocaleTimeString() },
+    { type: "output", text: "Escribe /ayuda o usa comandos como /mute, /ban, /clear_chat o /announce.", timestamp: new Date().toLocaleTimeString() }
+  ]);
+  const [executingConsoleCmd, setExecutingConsoleCmd] = useState(false);
+
+  // Admin private chat states
+  const [adminChatMessages, setAdminChatMessages] = useState<any[]>([]);
+  const [adminChatInput, setAdminChatInput] = useState("");
+  const [isSendingAdminMsg, setIsSendingAdminMsg] = useState(false);
+
   const authCode = currentAdmin?.code || "";
+
+  // Console Execution Handler
+  const handleExecuteConsoleCommand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!consoleCommand.trim()) return;
+    const cmd = consoleCommand.trim();
+    setConsoleCommand("");
+
+    // Append user input locally
+    setConsoleLogs(prev => [...prev, { type: "input", text: cmd, timestamp: new Date().toLocaleTimeString() }]);
+
+    if (cmd.toLowerCase() === "/ayuda") {
+      setConsoleLogs(prev => [
+        ...prev,
+        {
+          type: "output",
+          text: `Comandos de MundoFarmeo disponibles:
+• /mute <usuario> [minutos] - Silencia temporalmente a un usuario.
+• /unmute <usuario> - Remueve el silencio de un usuario.
+• /ban <usuario> [motivo] - Banea permanentemente a un usuario de MundoFarmeo.
+• /unban <usuario> - Remueve el baneo de un usuario.
+• /clear_chat - Vacía por completo el chat global.
+• /announce <mensaje> - Envía un anuncio fijado al chat global.
+• /gift_rank <usuario> <rango> [colorHex] - Otorga rango con color personalizado.
+• /give_all <mensaje> - Envía recompensa general al chat global.`,
+          timestamp: new Date().toLocaleTimeString()
+        }
+      ]);
+      return;
+    }
+
+    setExecutingConsoleCmd(true);
+    try {
+      const res = await fetch("/api/admin/console", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ authCode, command: cmd })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Error al ejecutar el comando.");
+      }
+      setConsoleLogs(prev => [...prev, { type: "output", text: data.feedback, timestamp: new Date().toLocaleTimeString() }]);
+      onRefreshAll(); // Refresh main app state
+    } catch (err: any) {
+      setConsoleLogs(prev => [...prev, { type: "error", text: `❌ Error: ${err.message}`, timestamp: new Date().toLocaleTimeString() }]);
+    } finally {
+      setExecutingConsoleCmd(false);
+    }
+  };
+
+  // Admin chat post Handler
+  const handleSendAdminChatMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminChatInput.trim() || isSendingAdminMsg) return;
+    const msgText = adminChatInput.trim();
+    setAdminChatInput("");
+    setIsSendingAdminMsg(true);
+
+    try {
+      const res = await fetch("/api/admin/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ authCode, text: msgText })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAdminChatMessages(data.messages || []);
+      } else {
+        triggerToast(data.error || "Error al enviar mensaje.", true);
+      }
+    } catch (err: any) {
+      triggerToast(err.message || "Error de red.", true);
+    } finally {
+      setIsSendingAdminMsg(false);
+    }
+  };
 
   // Refresh lists helper
   const fetchAdminLists = async () => {
@@ -110,6 +214,15 @@ export default function AdminPanel({
         const lRes = await fetch(`/api/logs?code=${authCode}`);
         const lData = await lRes.json();
         if (lRes.ok) setSystemLogs(lData.logs || []);
+      }
+
+      // Fetch admin private chat messages
+      if (activeTab === "admin_chat") {
+        const chatRes = await fetch(`/api/admin/chat?authCode=${authCode}`);
+        const chatData = await chatRes.json();
+        if (chatRes.ok) {
+          setAdminChatMessages(chatData.messages || []);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -158,7 +271,13 @@ export default function AdminPanel({
             tiktokUrl: settingsTiktok,
             policies: settingsPolicies,
             contactEmail: settingsEmail,
-            chatCleanupMinutes: Number(settingsChatCleanup)
+            chatCleanupMinutes: Number(settingsChatCleanup),
+            musicEnabled: settingsMusicEnabled,
+            musicUrl: settingsMusicUrl,
+            neonGlow: settingsNeonGlow,
+            cardStyle: settingsCardStyle,
+            particleEffect: settingsParticleEffect,
+            headerStyle: settingsHeaderStyle
           }
         })
       });
@@ -586,6 +705,24 @@ export default function AdminPanel({
         >
           <FileText className="w-3.5 h-3.5" />
           Logs & BD
+        </button>
+        <button
+          onClick={() => setActiveTab("console")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors flex items-center gap-1 flex-shrink-0 ${
+            activeTab === "console" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white"
+          }`}
+        >
+          <Terminal className="w-3.5 h-3.5" />
+          Consola
+        </button>
+        <button
+          onClick={() => setActiveTab("admin_chat")}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors flex items-center gap-1 flex-shrink-0 ${
+            activeTab === "admin_chat" ? "bg-blue-600 text-white" : "text-white/60 hover:text-white"
+          }`}
+        >
+          <MessageSquare className="w-3.5 h-3.5" />
+          Chat Staff
         </button>
       </div>
 
@@ -1270,11 +1407,90 @@ export default function AdminPanel({
                  </div>
                </div>
 
+               {/* SECCIÓN AVANZADA DE DECORACIÓN GAMER */}
+               <div className="border-t border-white/10 pt-3.5 mt-2 space-y-3">
+                 <h5 className="text-[11px] font-mono tracking-wider text-emerald-400 font-bold uppercase">✨ Decoraciones & Efectos Gamer Avanzados</h5>
+                 
+                 <div className="grid grid-cols-2 gap-3 bg-zinc-950/40 p-3 rounded-xl border border-white/5">
+                   <div className="space-y-1">
+                     <label className="block text-[10px] text-white/50 uppercase">Efecto de Fondo Activo</label>
+                     <select value={settingsParticleEffect} onChange={(e) => setSettingsParticleEffect(e.target.value as any)} className="w-full glass-input px-3 py-1 bg-zinc-950 text-xs">
+                       <option value="none">Ninguno (Fondo estático)</option>
+                       <option value="stars">✨ Estrellas Fugaces / Twinkling</option>
+                       <option value="snow">❄️ Copos de Nieve (Gamer Chill)</option>
+                       <option value="fireflies">🔥 Luciérnagas / Flamas flotantes</option>
+                     </select>
+                   </div>
+
+                   <div className="space-y-1">
+                     <label className="block text-[10px] text-white/50 uppercase">Estilo de Paneles</label>
+                     <select value={settingsCardStyle} onChange={(e) => setSettingsCardStyle(e.target.value as any)} className="w-full glass-input px-3 py-1 bg-zinc-950 text-xs">
+                       <option value="glass">Cristal Translúcido (Glassmorphism)</option>
+                       <option value="solid">Modo Sólido (Full Negro)</option>
+                       <option value="bordered">Bordes Ultra-Finos Blancos</option>
+                       <option value="futuristic">Cyber Gamer (Detalles neón)</option>
+                     </select>
+                   </div>
+
+                   <div className="space-y-1">
+                     <label className="block text-[10px] text-white/50 uppercase">Estilo del Encabezado (Header)</label>
+                     <select value={settingsHeaderStyle} onChange={(e) => setSettingsHeaderStyle(e.target.value as any)} className="w-full glass-input px-3 py-1 bg-zinc-950 text-xs">
+                       <option value="minimal">Minimalista (Sencillo)</option>
+                       <option value="cyber">Cyberpunk (Líneas tecnológicas)</option>
+                       <option value="gaming">Modo Gaming (Efecto resplandor)</option>
+                     </select>
+                   </div>
+
+                   <div className="space-y-2 flex flex-col justify-center">
+                     <label className="flex items-center gap-2 cursor-pointer text-white/80">
+                       <input 
+                         type="checkbox" 
+                         checked={settingsNeonGlow} 
+                         onChange={(e) => setSettingsNeonGlow(e.target.checked)} 
+                         className="rounded bg-zinc-900 border-white/10 text-emerald-500 focus:ring-0" 
+                       />
+                       <span className="text-[10px] uppercase font-mono tracking-wider">Activar Brillo Neón (Glow)</span>
+                     </label>
+                   </div>
+                 </div>
+
+                 {/* SECCIÓN MÚSICA GAMER */}
+                 <div className="bg-zinc-950/40 p-3 rounded-xl border border-white/5 space-y-2.5">
+                   <div className="flex justify-between items-center">
+                     <span className="text-[10px] font-mono tracking-wider text-blue-400 font-bold uppercase">🎵 Música de Fondo Gamer</span>
+                     <label className="relative inline-flex items-center cursor-pointer">
+                       <input 
+                         type="checkbox" 
+                         checked={settingsMusicEnabled} 
+                         onChange={(e) => setSettingsMusicEnabled(e.target.checked)} 
+                         className="sr-only peer"
+                       />
+                       <div className="w-9 h-5 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                       <span className="ml-2 text-[10px] font-mono text-white/60">MÚSICA</span>
+                     </label>
+                   </div>
+
+                   {settingsMusicEnabled && (
+                     <div className="space-y-1">
+                       <label className="block text-[9px] text-white/40 uppercase">Enlace MP3 / Stream de Música</label>
+                       <input 
+                         type="text" 
+                         value={settingsMusicUrl} 
+                         onChange={(e) => setSettingsMusicUrl(e.target.value)} 
+                         placeholder="Ej: https://archivo-mp3-de-musica.mp3" 
+                         className="w-full bg-zinc-900 border border-white/5 rounded px-2.5 py-1 text-[10px] text-white font-mono"
+                       />
+                       <p className="text-[8px] text-white/30">Puedes usar cualquier enlace MP3 directo para que suene de fondo.</p>
+                     </div>
+                   )}
+                 </div>
+               </div>
+
               <button
                 onClick={handleSaveSettings}
-                className="w-full py-2 bg-blue-600 hover:bg-blue-500 rounded-full text-white font-sans font-medium text-xs transition-colors cursor-pointer mt-2"
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 rounded-full text-white font-sans font-semibold text-xs transition-colors hover:scale-[1.01] active:scale-[0.99] cursor-pointer mt-2"
               >
-                Guardar Cambios de Apariencia
+                Guardar Ajustes & Diseño Completo
               </button>
             </div>
           </div>
@@ -1300,14 +1516,28 @@ export default function AdminPanel({
                   </button>
                 )}
               </div>
-              <div className="space-y-1">
-                <label className="block text-[10px] text-white/50 uppercase">Código secreto único (Ej: blandyPro)</label>
+               <div className="space-y-1">
+                <div className="flex justify-between items-center">
+                  <label className="block text-[10px] text-white/50 uppercase">Código secreto único (Ej: blandyPro)</label>
+                  {(!newAdminCode || newAdminCode.code !== "blandygerra2007") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const rand = "MF_" + Math.random().toString(36).substring(2, 8).toUpperCase();
+                        setNewAdminCode({ ...(newAdminCode || {}), code: rand });
+                      }}
+                      className="text-[10px] text-emerald-400 hover:text-emerald-300 font-mono tracking-wide cursor-pointer"
+                    >
+                      ⚡ Generar Aleatorio
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   placeholder="Código secreto único"
                   value={newAdminCode?.code || ""}
                   onChange={(e) => setNewAdminCode({ ...newAdminCode, code: e.target.value })}
-                  className="w-full glass-input px-3 py-1.5"
+                  className="w-full glass-input px-3 py-1.5 font-mono"
                   disabled={newAdminCode?.code === "blandygerra2007"}
                 />
               </div>
@@ -1354,11 +1584,64 @@ export default function AdminPanel({
                 </div>
               </div>
 
-              <div className="bg-zinc-950 p-2.5 rounded-lg space-y-1 border border-white/5 text-[10px]">
-                <span className="text-white/40 block">Permisos Habilitados por Defecto:</span>
-                <p>✓ Crear, Editar, Eliminar Trades y Servicios</p>
-                <p>✓ Moderar chat global</p>
-                <p>⚠️ Excluye manipulación de Base de Datos crítica</p>
+              <div className="bg-zinc-950 p-3 rounded-xl border border-white/5 space-y-2">
+                <span className="text-[10px] text-blue-400 font-mono uppercase tracking-wider block font-bold">Permisos del Rango / Rol:</span>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  {[
+                    { key: "createTrades", label: "Crear Trades" },
+                    { key: "editTrades", label: "Editar Trades" },
+                    { key: "deleteTrades", label: "Eliminar Trades" },
+                    { key: "createServices", label: "Crear Servicios" },
+                    { key: "editServices", label: "Editar Servicios" },
+                    { key: "deleteServices", label: "Eliminar Servicios" },
+                    { key: "editNews", label: "Publicar Noticias" },
+                    { key: "manageUsers", label: "Administrar Usuarios" },
+                    { key: "manageChat", label: "Moderar Chat" },
+                    { key: "ban", label: "Banear Usuarios" },
+                    { key: "mute", label: "Mutear Usuarios" },
+                    { key: "kick", label: "Kickear Usuarios" },
+                    { key: "manageAds", label: "Administrar Anuncios" },
+                    { key: "changeDesign", label: "Cambiar Diseño" },
+                    { key: "modifyDb", label: "Acceso Base de Datos" },
+                  ].map((perm) => {
+                    const permissions = newAdminCode?.permissions || {
+                      editTrades: true,
+                      deleteTrades: true,
+                      createTrades: true,
+                      editServices: true,
+                      deleteServices: true,
+                      createServices: true,
+                      editNews: true,
+                      manageUsers: false,
+                      manageChat: true,
+                      ban: false,
+                      mute: true,
+                      kick: true,
+                      viewLogs: false,
+                      manageAds: false,
+                      changeDesign: false,
+                      modifyDb: false
+                    };
+                    const isChecked = !!(permissions as any)[perm.key];
+                    return (
+                      <label key={perm.key} className="flex items-center gap-1.5 cursor-pointer text-white/75 hover:text-white">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            const updatedPerms = { ...permissions, [perm.key]: e.target.checked };
+                            setNewAdminCode({
+                              ...(newAdminCode || {}),
+                              permissions: updatedPerms
+                            });
+                          }}
+                          className="rounded text-blue-600 bg-zinc-900 border-white/10 w-3 h-3 focus:ring-0"
+                        />
+                        {perm.label}
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               <button
@@ -1479,6 +1762,220 @@ export default function AdminPanel({
                 ))}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* 9. COMMAND CONSOLE */}
+        {activeTab === "console" && (
+          <div className="bg-zinc-950 border border-white/5 rounded-2xl p-4 flex flex-col h-[520px] font-mono select-text">
+            {!consoleUnlocked ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-4 space-y-4">
+                <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 animate-pulse">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <h5 className="text-white text-xs font-bold font-mono tracking-widest uppercase">MF_FIREWALL_SYSTEM: ACCESO RESTRINGIDO</h5>
+                  <p className="text-[10px] text-white/50 max-w-xs mx-auto">
+                    La consola de comandos requiere confirmación de contraseña maestra de staff para repeler intrusiones o bots automatizados.
+                  </p>
+                </div>
+                <form 
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (consolePasswordInput === "blandygerra2007") {
+                      setConsoleUnlocked(true);
+                      setConsolePasswordError("");
+                    } else {
+                      setConsolePasswordError("❌ CLAVE DE ACCESO INCORRECTA");
+                    }
+                  }}
+                  className="w-full max-w-xs space-y-3"
+                >
+                  <input 
+                    type="password"
+                    placeholder="Contraseña de Admin..."
+                    value={consolePasswordInput}
+                    onChange={(e) => setConsolePasswordInput(e.target.value)}
+                    className="w-full text-center bg-black border border-white/10 rounded px-3 py-1.5 text-xs text-rose-400 focus:outline-none focus:border-rose-500 font-mono"
+                  />
+                  {consolePasswordError && (
+                    <div className="text-[10px] text-rose-500 font-bold font-mono animate-bounce">{consolePasswordError}</div>
+                  )}
+                  <button
+                    type="submit"
+                    className="w-full py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs rounded transition-all cursor-pointer font-bold tracking-wider"
+                  >
+                    DESBLOQUEAR TERMINAL
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 bg-rose-500 rounded-full animate-ping" />
+                    <span className="text-emerald-400 text-xs font-bold font-mono">MF_ADMIN_CONSOLE_v1.2.sh</span>
+                  </div>
+                  <button 
+                    onClick={() => setConsoleLogs([{ type: "output", text: "⌨️ Terminal reiniciada.", timestamp: new Date().toLocaleTimeString() }])}
+                    className="text-[10px] text-white/40 hover:text-white px-2 py-0.5 bg-white/5 rounded hover:bg-white/10 cursor-pointer"
+                  >
+                    Limpiar Pantalla
+                  </button>
+                </div>
+
+                {/* Logs viewport */}
+                <div className="flex-1 overflow-y-auto space-y-2 pr-1 mb-4 text-[11px] leading-relaxed">
+                  {consoleLogs.map((log, index) => (
+                    <div key={index} className="space-y-0.5">
+                      <div className="text-[9px] text-white/30 text-right font-mono">[{log.timestamp}]</div>
+                      {log.type === "input" ? (
+                        <div className="text-blue-400 font-bold flex items-start gap-1">
+                          <span>$</span>
+                          <span>{log.text}</span>
+                        </div>
+                      ) : log.type === "error" ? (
+                        <div className="text-rose-400 bg-rose-500/10 p-2 rounded border border-rose-500/10 whitespace-pre-wrap">
+                          {log.text}
+                        </div>
+                      ) : (
+                        <div className="text-emerald-400 whitespace-pre-wrap text-left">
+                          {log.text}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Quick command buttons for Swiss army-knife accessibility */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setConsoleCommand("/ayuda")}
+                    className="py-1 px-2 text-[10px] bg-white/5 border border-white/10 hover:bg-white/10 text-white/80 rounded cursor-pointer text-left transition-all"
+                  >
+                    💡 /ayuda
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConsoleCommand("/clear_chat")}
+                    className="py-1 px-2 text-[10px] bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 text-rose-400 rounded cursor-pointer text-left transition-all"
+                  >
+                    🗑/clear_chat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConsoleCommand("/announce ¡Anuncio oficial de MundoFarmeo!")}
+                    className="py-1 px-2 text-[10px] bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 text-amber-400 rounded cursor-pointer text-left transition-all"
+                  >
+                    📢 /announce
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConsoleUnlocked(false);
+                      setConsolePasswordInput("");
+                    }}
+                    className="py-1 px-2 text-[10px] bg-purple-500/10 border border-purple-500/20 hover:bg-purple-500/20 text-purple-400 rounded cursor-pointer text-left transition-all"
+                  >
+                    🔒 Bloquear Consola
+                  </button>
+                </div>
+
+                {/* Command Input Form */}
+                <form onSubmit={handleExecuteConsoleCommand} className="flex gap-2">
+                  <span className="text-blue-500 font-bold text-sm self-center font-mono select-none">$</span>
+                  <input
+                    type="text"
+                    placeholder="Escribe un comando de MundoFarmeo... (Ej: /mute blandyGamer 10)"
+                    value={consoleCommand}
+                    onChange={(e) => setConsoleCommand(e.target.value)}
+                    disabled={executingConsoleCmd}
+                    className="flex-1 bg-zinc-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-emerald-400 placeholder-white/20 focus:outline-none focus:border-emerald-500 font-mono"
+                  />
+                  <button
+                    type="submit"
+                    disabled={executingConsoleCmd || !consoleCommand.trim()}
+                    className="px-4 bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-bold text-xs rounded-xl disabled:opacity-40 transition-colors cursor-pointer"
+                  >
+                    {executingConsoleCmd ? "Ejecutando..." : "Ejecutar"}
+                  </button>
+                </form>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* 10. ADMIN PRIVATE STAFF CHAT */}
+        {activeTab === "admin_chat" && (
+          <div className="bg-zinc-950 border border-white/5 rounded-2xl p-4 flex flex-col h-[520px]">
+            <div className="flex items-center justify-between border-b border-white/5 pb-2 mb-3">
+              <div className="flex items-center gap-1.5">
+                <MessageSquare className="w-4 h-4 text-blue-400" />
+                <span className="text-xs font-semibold text-white">Chat Privado del Staff</span>
+              </div>
+              <button 
+                onClick={fetchAdminLists}
+                className="p-1 hover:bg-white/5 rounded text-white/55 transition-colors"
+                title="Actualizar chat"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Message Stream */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1 mb-4">
+              {adminChatMessages.length === 0 ? (
+                <div className="text-center py-10 text-white/30 text-xs">
+                  No hay mensajes en el chat de staff. ¡Sé el primero en iniciar la conversación!
+                </div>
+              ) : (
+                adminChatMessages.map((msg) => (
+                  <div key={msg.id} className="flex gap-2.5 items-start bg-white/[0.01] p-2 rounded-xl border border-white/[0.02]">
+                    <img
+                      src={msg.avatar || "https://api.dicebear.com/7.x/bottts/svg?seed=" + encodeURIComponent(msg.username)}
+                      alt={msg.username}
+                      className="w-7 h-7 rounded-lg object-cover flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0 space-y-0.5">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-sans font-semibold text-white text-xs">
+                          {msg.username}
+                        </span>
+                        <span className="text-[8px] font-mono uppercase tracking-widest px-1 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/10">
+                          {msg.roleBadge || "Staff"}
+                        </span>
+                        <span className="text-[8px] font-mono text-white/30 ml-auto">
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </div>
+                      <p className="text-white/80 text-xs whitespace-pre-wrap font-sans break-words text-left select-text">
+                        {msg.text}
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Input message form */}
+            <form onSubmit={handleSendAdminChatMessage} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Escribe un mensaje seguro de staff..."
+                value={adminChatInput}
+                onChange={(e) => setAdminChatInput(e.target.value)}
+                disabled={isSendingAdminMsg}
+                className="flex-1 glass-input px-3 py-2 text-xs"
+              />
+              <button
+                type="submit"
+                disabled={isSendingAdminMsg || !adminChatInput.trim()}
+                className="px-4 bg-blue-600 hover:bg-blue-500 text-white font-sans font-medium text-xs rounded-xl disabled:opacity-40 transition-colors cursor-pointer"
+              >
+                {isSendingAdminMsg ? "Enviando..." : "Enviar"}
+              </button>
+            </form>
           </div>
         )}
 

@@ -13,10 +13,11 @@ interface Props {
   currentAdmin: AdminCode | null;
   onOpenAuth: () => void;
   onRefreshTrades: () => void;
+  gameCategories?: string[];
 }
 
 export default function TradeSystem({ 
-  trades, catalog, currentUser, currentAdmin, onOpenAuth, onRefreshTrades 
+  trades, catalog, currentUser, currentAdmin, onOpenAuth, onRefreshTrades, gameCategories = []
 }: Props) {
   // Navigation & Filter states
   const [searchQuery, setSearchQuery] = useState("");
@@ -33,6 +34,8 @@ export default function TradeSystem({
   const [formWanted, setFormWanted] = useState<string[]>([]); // Catalog IDs
   const [formQuantity, setFormQuantity] = useState(1);
   const [formTags, setFormTags] = useState("");
+  const [formCategory, setFormCategory] = useState("Blox Fruits");
+  const [customCategoryInput, setCustomCategoryInput] = useState("");
   const [formIsSpecial, setFormIsSpecial] = useState(false);
   const [formIsPinned, setFormIsPinned] = useState(false);
   const [formIsHidden, setFormIsHidden] = useState(false);
@@ -80,6 +83,8 @@ export default function TradeSystem({
     setFormWanted([]);
     setFormQuantity(1);
     setFormTags("");
+    setFormCategory("Blox Fruits");
+    setCustomCategoryInput("");
     setFormIsSpecial(false);
     setFormIsPinned(false);
     setFormIsHidden(false);
@@ -98,6 +103,8 @@ export default function TradeSystem({
     setFormWanted(trade.itemsWanted);
     setFormQuantity(trade.quantity);
     setFormTags(trade.tags.join(", "));
+    setFormCategory(trade.category || "Blox Fruits");
+    setCustomCategoryInput(trade.category && trade.category !== "Blox Fruits" && !gameCategories.includes(trade.category) ? trade.category : "");
     setFormIsSpecial(trade.isSpecial);
     setFormIsPinned(trade.isPinned);
     setFormIsHidden(trade.isHidden);
@@ -137,6 +144,8 @@ export default function TradeSystem({
       return;
     }
 
+    const finalCategory = formCategory === "Otros" ? (customCategoryInput.trim() || "Otros") : formCategory;
+
     const payload = {
       authCode: currentAdmin?.code || undefined,
       userId: currentUser?.id || undefined,
@@ -148,6 +157,7 @@ export default function TradeSystem({
         quantity: formQuantity,
         tags: formTags.split(",").map(s => s.trim()).filter(s => s.length > 0),
         status: editingTrade ? editingTrade.status : "Available",
+        category: finalCategory,
         isSpecial: formIsSpecial,
         isPinned: formIsPinned,
         isHidden: formIsHidden,
@@ -250,6 +260,14 @@ export default function TradeSystem({
       setRequestedTrade(null);
     }, 5000);
   };
+
+  // Get all unique categories from all existing trades
+  const uniqueTradeCategories = Array.from(new Set(trades.map(t => t.category).filter(Boolean)));
+  const allAvailableCategories = Array.from(new Set([
+    "Blox Fruits",
+    ...gameCategories,
+    ...uniqueTradeCategories
+  ]));
 
   // Filter and search computation
   const filteredTrades = trades.filter((trade) => {
@@ -357,8 +375,9 @@ export default function TradeSystem({
             className="flex-1 glass-input px-3 py-2 text-sm text-white/80 bg-zinc-900 border-white/5"
           >
             <option value="All">Todos los Juegos</option>
-            <option value="Blox Fruits">Blox Fruits</option>
-            <option value="Otros">Otros</option>
+            {allAvailableCategories.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -627,6 +646,37 @@ export default function TradeSystem({
                       className="w-full glass-input px-4 py-2.5 text-sm"
                     />
                   </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-sans text-white/60 font-medium">Juego / Categoría <span className="text-red-400">*</span></label>
+                    <select
+                      value={formCategory}
+                      onChange={(e) => setFormCategory(e.target.value)}
+                      className="w-full glass-input px-4 py-2.5 text-sm text-white/80 bg-zinc-900"
+                    >
+                      <option value="Blox Fruits">Blox Fruits</option>
+                      {gameCategories.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                      <option value="Otros">Otros (Especificar nuevo juego)</option>
+                    </select>
+                  </div>
+
+                  {formCategory === "Otros" && (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-sans text-white/60 font-medium">Nombre del Nuevo Juego <span className="text-red-400">*</span></label>
+                      <input
+                        type="text"
+                        placeholder="Ej: King Legacy, Bedwars, etc."
+                        value={customCategoryInput}
+                        onChange={(e) => setCustomCategoryInput(e.target.value)}
+                        required
+                        className="w-full glass-input px-4 py-2.5 text-sm"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
