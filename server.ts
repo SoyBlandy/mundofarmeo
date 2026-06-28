@@ -476,7 +476,9 @@ async function run() {
         label: codeData.label,
         permissions: codeData.permissions,
         suspended: false,
-        createdBy: admin.label
+        createdBy: admin.label,
+        roleBadge: codeData.roleBadge || "Administrador",
+        roleColor: codeData.roleColor || "#3b82f6"
       };
       db.adminCodes.push(newCode);
       logAction(admin.label, req.ip, "CREAR_CODIGO_ADMIN", `Se creó el código de administrador '${codeData.code}'.`);
@@ -579,6 +581,16 @@ async function run() {
       user.muteUntil = undefined;
       user.banReason = undefined;
       logAction(admin.label, req.ip, "LEVANTAR_SANCON", `Sanciones removidas para el usuario '${user.username}'`);
+    } else if (actionType === "set_rank") {
+      const { roleBadge, roleColor } = req.body;
+      user.roleBadge = roleBadge ? escapeHTML(roleBadge.substring(0, 30)) : undefined;
+      user.roleColor = roleColor ? escapeHTML(roleColor.substring(0, 10)) : undefined;
+      logAction(admin.label, req.ip, "ASIGNAR_RANGO", `Rango '${user.roleBadge || "Ninguno"}' con color '${user.roleColor || "Ninguno"}' asignado a '${user.username}'`);
+    } else if (actionType === "remove_rank") {
+      const oldRank = user.roleBadge;
+      user.roleBadge = undefined;
+      user.roleColor = undefined;
+      logAction(admin.label, req.ip, "QUITAR_RANGO", `Rango '${oldRank || "Ninguno"}' removido para '${user.username}'`);
     }
 
     saveDatabase();
@@ -956,6 +968,7 @@ async function run() {
     let senderId = "anonymous";
     let roleBadge = undefined;
     let roleColor = undefined;
+    let senderAvatar = undefined;
 
     if (authCode) {
       const admin = db.adminCodes.find(c => c.code === authCode && !c.suspended);
@@ -964,8 +977,9 @@ async function run() {
       }
       senderName = admin.label;
       senderId = "admin-" + admin.id;
-      roleBadge = admin.code === "blandygerra2007" ? "Super Admin" : "Administrador";
-      roleColor = "#3b82f6"; // Primary blue
+      roleBadge = admin.roleBadge || (admin.code === "blandygerra2007" ? "Super Admin" : "Administrador");
+      roleColor = admin.roleColor || "#3b82f6"; // Primary blue
+      senderAvatar = "https://api.dicebear.com/7.x/bottts/svg?seed=" + encodeURIComponent(senderName);
     } else {
       const user = db.users.find(u => u.id === userId);
       if (!user) {
@@ -988,6 +1002,9 @@ async function run() {
 
       senderName = user.username;
       senderId = user.id;
+      roleBadge = user.roleBadge;
+      roleColor = user.roleColor;
+      senderAvatar = user.avatar;
     }
 
     if ((!text || text.trim() === "") && !sticker) {
@@ -1016,7 +1033,8 @@ async function run() {
       isPinned: false,
       roleBadge,
       roleColor,
-      isStickerOnly: !!(!cleanText && sticker)
+      isStickerOnly: !!(!cleanText && sticker),
+      avatar: senderAvatar
     };
 
     db.chatMessages.push(newMessage);

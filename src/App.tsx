@@ -32,6 +32,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<DBUser | null>(null);
   const [currentAdmin, setCurrentAdmin] = useState<AdminCode | null>(null);
 
+  // Edit profile picture states
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [editingAvatar, setEditingAvatar] = useState("");
+
   // Authentication Drawer/Modal
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authUsername, setAuthUsername] = useState("");
@@ -200,6 +204,32 @@ export default function App() {
     loadPlatformData();
   };
 
+  const handleUpdateProfile = async (avatarUrl: string) => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch("/api/users/update-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          avatar: avatarUrl
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCurrentUser(data.user);
+        localStorage.setItem("mundofarmeo_user", JSON.stringify(data.user));
+        setShowEditProfileModal(false);
+        loadPlatformData();
+      } else {
+        alert(data.error || "Error al actualizar perfil.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error de conexión al servidor.");
+    }
+  };
+
   if (!siteSettings || !ads) {
     return (
       <div className="min-h-screen bg-[#09090b] text-white flex flex-col items-center justify-center font-sans space-y-4">
@@ -227,7 +257,7 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col justify-between transition-colors duration-500 overflow-x-hidden ${bgStyles[siteSettings.backgroundType]}`} id="mundofarmeo-root">
+    <div className={`min-h-screen flex flex-col justify-between transition-colors duration-500 overflow-x-hidden pb-16 md:pb-0 ${bgStyles[siteSettings.backgroundType]}`} id="mundofarmeo-root">
       
       {/* Top Banner Advertisement (Global spacing) */}
       <AdBanners ad={ads.top} type="top" />
@@ -312,15 +342,27 @@ export default function App() {
                     <img
                       src={currentUser.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${currentUser.username}`}
                       alt={currentUser.username}
-                      className="w-8 h-8 rounded-full bg-zinc-800 border border-white/10"
+                      className="w-8 h-8 rounded-full bg-zinc-800 border border-white/10 cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                      title="Cambiar Foto de Perfil"
+                      onClick={() => {
+                        setEditingAvatar(currentUser.avatar || "");
+                        setShowEditProfileModal(true);
+                      }}
                       referrerPolicy="no-referrer"
                     />
-                    <div className="hidden sm:block text-left">
+                    <div 
+                      className="hidden sm:block text-left cursor-pointer hover:opacity-85"
+                      title="Cambiar Foto de Perfil"
+                      onClick={() => {
+                        setEditingAvatar(currentUser.avatar || "");
+                        setShowEditProfileModal(true);
+                      }}
+                    >
                       <span className="text-xs font-sans font-medium text-white block">
                         {currentUser.username}
                       </span>
-                      <span className="text-[9px] font-mono text-white/40 block">
-                        Cliente Registrado
+                      <span className="text-[9px] font-mono text-emerald-400 block hover:underline">
+                        Editar Perfil ⚙️
                       </span>
                     </div>
                     <button
@@ -810,16 +852,177 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Edit Profile Picture Modal */}
+      <AnimatePresence>
+        {showEditProfileModal && currentUser && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="glass-panel w-full max-w-md rounded-2xl p-6 md:p-8 space-y-5 relative shadow-2xl"
+            >
+              <button
+                onClick={() => setShowEditProfileModal(false)}
+                className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono tracking-widest text-emerald-400 uppercase font-bold">
+                  Personalización
+                </span>
+                <h3 className="text-xl font-display font-semibold text-white">
+                  Editar Foto de Perfil
+                </h3>
+                <p className="text-xs text-white/50">
+                  Selecciona uno de nuestros avatares gamer rápidos o ingresa una dirección URL de imagen personalizada.
+                </p>
+              </div>
+
+              {/* Avatar options grid */}
+              <div className="space-y-3">
+                <label className="block text-xs font-sans text-white/60 font-medium">Avatares Rápidos (Haz Clic):</label>
+                <div className="grid grid-cols-4 gap-3 bg-zinc-950/40 p-3 rounded-xl border border-white/5">
+                  {[
+                    { name: "Luffy", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Luffy" },
+                    { name: "Zoro", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Zoro" },
+                    { name: "Pirate", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Pirate" },
+                    { name: "Alex", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Alex" },
+                    { name: "Sophia", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Sophia" },
+                    { name: "Gato", url: "https://api.dicebear.com/7.x/bottts/svg?seed=Cat" },
+                    { name: "Robot", url: "https://api.dicebear.com/7.x/bottts/svg?seed=Gamer" },
+                    { name: "Ninja", url: "https://api.dicebear.com/7.x/adventurer/svg?seed=Ninja" },
+                  ].map((av) => (
+                    <button
+                      key={av.name}
+                      onClick={() => setEditingAvatar(av.url)}
+                      className={`relative rounded-xl overflow-hidden border-2 transition-all p-1 bg-zinc-900/60 cursor-pointer ${
+                        editingAvatar === av.url ? "border-emerald-500 scale-105" : "border-transparent hover:border-white/20"
+                      }`}
+                      title={av.name}
+                    >
+                      <img src={av.url} alt={av.name} className="w-12 h-12 object-contain mx-auto" referrerPolicy="no-referrer" />
+                      <div className="text-[8px] text-white/40 text-center mt-1 font-mono uppercase truncate">{av.name}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom URL Input */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-sans text-white/60 font-medium">O ingresa URL de Imagen Personalizada:</label>
+                <input
+                  type="url"
+                  placeholder="Ej: https://i.imgur.com/imagen.png"
+                  value={editingAvatar}
+                  onChange={(e) => setEditingAvatar(e.target.value)}
+                  className="w-full glass-input px-4 py-2 text-xs text-white"
+                />
+                <p className="text-[10px] text-white/30">
+                  Admite enlaces de Imgur, Discord, Roblox u otras plataformas.
+                </p>
+              </div>
+
+              {/* Preview */}
+              <div className="flex items-center gap-3 bg-white/[0.02] p-3 rounded-xl border border-white/5">
+                <img
+                  src={editingAvatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${currentUser.username}`}
+                  alt="Vista previa"
+                  className="w-12 h-12 rounded-full border border-white/10 object-cover bg-zinc-800"
+                  referrerPolicy="no-referrer"
+                />
+                <div>
+                  <span className="text-xs font-sans font-semibold text-white block">Vista Previa</span>
+                  <span className="text-[10px] font-mono text-white/40">{currentUser.username}</span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  onClick={() => setShowEditProfileModal(false)}
+                  className="flex-1 py-2 border border-white/10 hover:bg-white/5 text-white/70 hover:text-white font-sans text-xs font-medium rounded-full transition-all cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleUpdateProfile(editingAvatar)}
+                  className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-sans text-xs font-semibold rounded-full hover:scale-102 active:scale-98 transition-all cursor-pointer"
+                >
+                  Guardar Cambios
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Floating Admin Dock Toggle Shortcut (rendered if admin is authenticated but panel closed) */}
       {currentAdmin && !isAdminPanelOpen && (
         <button
           onClick={() => setIsAdminPanelOpen(true)}
-          className="fixed bottom-6 right-6 p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl hover:scale-110 active:scale-90 transition-all z-40 animate-bounce cursor-pointer border border-white/10"
+          className="fixed bottom-20 right-4 md:bottom-6 md:right-6 p-4 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl hover:scale-110 active:scale-90 transition-all z-40 animate-bounce cursor-pointer border border-white/10"
           title="Abrir Panel de Administración"
         >
           <Sliders className="w-5 h-5" />
         </button>
       )}
+
+      {/* Mobile Sticky Bottom Navigation Bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/90 backdrop-blur-md border-t border-white/10 md:hidden py-2 px-1 flex items-center justify-around shadow-2xl">
+        <button
+          onClick={() => setActiveTab("inicio")}
+          className={`flex flex-col items-center gap-1.5 py-1 px-3.5 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
+            activeTab === "inicio" ? "text-blue-400 font-semibold" : "text-white/40"
+          }`}
+        >
+          <Compass className="w-5 h-5" />
+          <span className="text-[10px] font-sans font-medium tracking-wide">Inicio</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("servicios")}
+          className={`flex flex-col items-center gap-1.5 py-1 px-3.5 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
+            activeTab === "servicios" ? "text-blue-400 font-semibold" : "text-white/40"
+          }`}
+        >
+          <Sparkles className="w-5 h-5" />
+          <span className="text-[10px] font-sans font-medium tracking-wide">Servicios</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("trade")}
+          className={`flex flex-col items-center gap-1.5 py-1 px-3.5 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
+            activeTab === "trade" ? "text-blue-400 font-semibold" : "text-white/40"
+          }`}
+        >
+          <Gamepad2 className="w-5 h-5" />
+          <span className="text-[10px] font-sans font-medium tracking-wide">Trades</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("chat")}
+          className={`flex flex-col items-center gap-1.5 py-1 px-3.5 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg relative ${
+            activeTab === "chat" ? "text-blue-400 font-semibold" : "text-white/40"
+          }`}
+        >
+          <MessageSquare className="w-5 h-5" />
+          <span className="text-[10px] font-sans font-medium tracking-wide">Chat</span>
+          <span className="absolute top-1 right-3.5 w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+        </button>
+
+        <button
+          onClick={() => setActiveTab("news_faqs")}
+          className={`flex flex-col items-center gap-1.5 py-1 px-3.5 transition-all duration-200 active:scale-95 cursor-pointer rounded-lg ${
+            activeTab === "news_faqs" ? "text-blue-400 font-semibold" : "text-white/40"
+          }`}
+        >
+          <Newspaper className="w-5 h-5" />
+          <span className="text-[10px] font-sans font-medium tracking-wide">Noticias</span>
+        </button>
+      </div>
 
     </div>
   );

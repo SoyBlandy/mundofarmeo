@@ -198,7 +198,12 @@ export default function AdminPanel({
   };
 
   // Moderate user action
-  const handleModerateUser = async (targetUserId: string, actionType: "ban" | "mute" | "warn" | "unban" | "unmute") => {
+  const handleModerateUser = async (
+    targetUserId: string, 
+    actionType: "ban" | "mute" | "warn" | "unban" | "unmute" | "set_rank" | "remove_rank",
+    roleBadge?: string,
+    roleColor?: string
+  ) => {
     try {
       const res = await fetch("/api/users/moderate", {
         method: "POST",
@@ -208,7 +213,9 @@ export default function AdminPanel({
           targetUserId,
           actionType,
           reason: moderationReason || "Sanción aplicada por administración",
-          durationMinutes: muteDuration
+          durationMinutes: muteDuration,
+          roleBadge,
+          roleColor
         })
       });
       const data = await res.json();
@@ -647,7 +654,21 @@ export default function AdminPanel({
                   dbUsers.map((u) => (
                     <div key={u.id} className="bg-white/[0.02] p-3 rounded-lg border border-white/5 flex flex-col gap-2 text-xs">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-white">{u.username}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-white">{u.username}</span>
+                          {u.roleBadge && (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase"
+                              style={{
+                                backgroundColor: `${u.roleColor || "#10b981"}15`,
+                                color: u.roleColor || "#10b981",
+                                border: `1px solid ${u.roleColor || "#10b981"}30`
+                              }}
+                            >
+                              {u.roleBadge}
+                            </span>
+                          )}
+                        </div>
                         <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                           u.status === "banned" ? "bg-rose-500/15 text-rose-400" :
                           u.status === "muted" ? "bg-amber-500/15 text-amber-400" : "bg-emerald-500/15 text-emerald-400"
@@ -686,6 +707,69 @@ export default function AdminPanel({
                         >
                           Unmute
                         </button>
+                      </div>
+
+                      {/* Rank assignment tools */}
+                      <div className="mt-2 pt-2 border-t border-white/5 flex flex-col gap-1.5 bg-zinc-950/40 p-2 rounded-lg">
+                        <span className="text-[9px] text-white/40 font-mono uppercase">Rango Rápido (1-Clic):</span>
+                        <div className="flex flex-wrap gap-1">
+                          {[
+                            { name: "Socio", color: "#10b981", bg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20" },
+                            { name: "VIP", color: "#f59e0b", bg: "bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20" },
+                            { name: "Ayudante", color: "#06b6d4", bg: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20" },
+                            { name: "Moderador", color: "#8b5cf6", bg: "bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20" },
+                            { name: "Creador", color: "#ef4444", bg: "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20" },
+                          ].map((preset) => (
+                            <button
+                              key={preset.name}
+                              onClick={() => {
+                                handleModerateUser(u.id, "set_rank", preset.name, preset.color);
+                              }}
+                              className={`px-2 py-1 text-[9px] font-sans font-bold rounded border cursor-pointer transition-all ${preset.bg}`}
+                            >
+                              +{preset.name}
+                            </button>
+                          ))}
+                          {u.roleBadge && (
+                            <button
+                              onClick={() => handleModerateUser(u.id, "remove_rank")}
+                              className="px-2 py-1 text-[9px] font-sans font-bold rounded border border-rose-900/30 bg-rose-950/20 text-rose-300 cursor-pointer hover:bg-rose-950/40 transition-all"
+                            >
+                              Quitar Rango
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex gap-1.5 items-center mt-1 pt-1 border-t border-white/[0.03]">
+                          <span className="text-[8px] text-white/30 whitespace-nowrap">O Personalizado:</span>
+                          <input
+                            type="text"
+                            placeholder="Nombre (ej: Pro)"
+                            id={`rank-name-${u.id}`}
+                            className="flex-1 glass-input px-2 py-0.5 text-[10px]"
+                            defaultValue={u.roleBadge || ""}
+                          />
+                          <input
+                            type="color"
+                            id={`rank-color-${u.id}`}
+                            className="w-5 h-5 rounded border border-white/10 bg-transparent cursor-pointer"
+                            defaultValue={u.roleColor || "#10b981"}
+                          />
+                          <button
+                            onClick={() => {
+                              const badgeVal = (document.getElementById(`rank-name-${u.id}`) as HTMLInputElement)?.value;
+                              const colorVal = (document.getElementById(`rank-color-${u.id}`) as HTMLInputElement)?.value;
+                              if (!badgeVal) {
+                                triggerToast("Ingresa un nombre para el rango.", true);
+                                return;
+                              }
+                              handleModerateUser(u.id, "set_rank", badgeVal, colorVal);
+                            }}
+                            className="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-medium cursor-pointer"
+                          >
+                            Asignar
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))
@@ -1201,23 +1285,74 @@ export default function AdminPanel({
           <div className="space-y-4">
             <h4 className="text-sm font-mono tracking-wider text-blue-400 font-bold uppercase">Administración de Códigos & Creadores</h4>
             
-            {/* Create new Admin Code Block */}
+            {/* Create / Edit Admin Code Block */}
             <div className="bg-white/[0.03] p-4 rounded-xl border border-white/5 space-y-3 text-xs">
-              <span className="font-semibold text-white block">Registrar nuevo Creador/Admin</span>
-              <input
-                type="text"
-                placeholder="Código secreto único (Ej: blandyPro)"
-                value={newAdminCode?.code || ""}
-                onChange={(e) => setNewAdminCode({ ...newAdminCode, code: e.target.value })}
-                className="w-full glass-input px-3 py-1.5"
-              />
-              <input
-                type="text"
-                placeholder="Nombre/Etiqueta (Ej: Moderador Pedro)"
-                value={newAdminCode?.label || ""}
-                onChange={(e) => setNewAdminCode({ ...newAdminCode, label: e.target.value })}
-                className="w-full glass-input px-3 py-1.5"
-              />
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-white block">
+                  {newAdminCode?.id ? "Editar Creador / Admin" : "Registrar nuevo Creador / Admin"}
+                </span>
+                {newAdminCode && (
+                  <button
+                    onClick={() => setNewAdminCode(null)}
+                    className="text-rose-400 hover:text-rose-300 text-[10px] font-sans"
+                  >
+                    Limpiar Formulario / Cancelar
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] text-white/50 uppercase">Código secreto único (Ej: blandyPro)</label>
+                <input
+                  type="text"
+                  placeholder="Código secreto único"
+                  value={newAdminCode?.code || ""}
+                  onChange={(e) => setNewAdminCode({ ...newAdminCode, code: e.target.value })}
+                  className="w-full glass-input px-3 py-1.5"
+                  disabled={newAdminCode?.code === "blandygerra2007"}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-[10px] text-white/50 uppercase">Nombre / Etiqueta (Ej: Moderador Pedro)</label>
+                <input
+                  type="text"
+                  placeholder="Nombre / Etiqueta"
+                  value={newAdminCode?.label || ""}
+                  onChange={(e) => setNewAdminCode({ ...newAdminCode, label: e.target.value })}
+                  className="w-full glass-input px-3 py-1.5"
+                />
+              </div>
+
+              {/* New fields: Rango and Color of the Admin/Creator */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="block text-[10px] text-white/50 uppercase">Rango / Rol (Ej: Admin, Moderador, Socio)</label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Administrador"
+                    value={newAdminCode?.roleBadge || ""}
+                    onChange={(e) => setNewAdminCode({ ...newAdminCode, roleBadge: e.target.value })}
+                    className="w-full glass-input px-3 py-1.5"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-[10px] text-white/50 uppercase">Color del Rango / Badge (Hex o Selector)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="color"
+                      value={newAdminCode?.roleColor || "#3b82f6"}
+                      onChange={(e) => setNewAdminCode({ ...newAdminCode, roleColor: e.target.value })}
+                      className="w-8 h-8 rounded border border-white/10 bg-transparent cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      placeholder="#3b82f6"
+                      value={newAdminCode?.roleColor || ""}
+                      onChange={(e) => setNewAdminCode({ ...newAdminCode, roleColor: e.target.value })}
+                      className="w-full glass-input px-3 py-1.5 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
 
               <div className="bg-zinc-950 p-2.5 rounded-lg space-y-1 border border-white/5 text-[10px]">
                 <span className="text-white/40 block">Permisos Habilitados por Defecto:</span>
@@ -1230,29 +1365,55 @@ export default function AdminPanel({
                 onClick={handleSaveAdminCode}
                 className="w-full py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-white font-sans font-medium transition-colors cursor-pointer"
               >
-                Crear Administrador
+                {newAdminCode?.id ? "Actualizar Administrador" : "Crear Administrador"}
               </button>
             </div>
 
             {/* List Active codes */}
             <div className="space-y-2">
               <span className="text-[10px] text-white/40 block font-mono uppercase">Códigos Registrados:</span>
-              {adminCodes.map((ac) => (
-                <div key={ac.id} className="bg-zinc-950 p-3 rounded-lg border border-white/5 text-xs space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-white">{ac.label}</span>
-                    {ac.code !== "blandygerra2007" && (
-                      <button
-                        onClick={() => handleDeleteAdminCode(ac.id)}
-                        className="text-rose-400 hover:text-rose-300 font-sans text-[10px]"
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {adminCodes.map((ac) => (
+                  <div key={ac.id} className="bg-zinc-950 p-3 rounded-lg border border-white/5 text-xs space-y-2 flex flex-col justify-between">
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-start">
+                        <span className="font-semibold text-white">{ac.label}</span>
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => setNewAdminCode(ac)}
+                            className="text-blue-400 hover:text-blue-300 font-sans text-[10px] bg-blue-400/10 px-1.5 py-0.5 rounded"
+                          >
+                            Editar
+                          </button>
+                          {ac.code !== "blandygerra2007" && (
+                            <button
+                              onClick={() => handleDeleteAdminCode(ac.id)}
+                              className="text-rose-400 hover:text-rose-300 font-sans text-[10px] bg-rose-400/10 px-1.5 py-0.5 rounded"
+                            >
+                              Eliminar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-white/50 font-mono">Código: {ac.code}</p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-1 border-t border-white/5">
+                      <span className="text-[9px] text-white/40 font-mono">Vista Chat:</span>
+                      <span
+                        className="text-[9px] font-sans font-semibold px-1.5 py-0.5 rounded uppercase"
+                        style={{
+                          backgroundColor: `${ac.roleColor || "#3b82f6"}15`,
+                          color: ac.roleColor || "#3b82f6",
+                          border: `1px solid ${ac.roleColor || "#3b82f6"}30`
+                        }}
                       >
-                        Eliminar
-                      </button>
-                    )}
+                        {ac.roleBadge || (ac.code === "blandygerra2007" ? "Super Admin" : "Administrador")}
+                      </span>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-white/50 font-mono">Código: {ac.code}</p>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         )}

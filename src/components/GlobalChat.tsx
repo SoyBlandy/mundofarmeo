@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from "react";
 import { ChatMessage, User as DBUser, AdminCode } from "../types";
 import { 
   Send, Smile, CornerDownRight, Pin, Trash2, Edit2, Search, 
-  X, AlertCircle, VolumeX, ShieldCheck, Sticker, CheckCircle, MessageSquare
+  X, AlertCircle, VolumeX, ShieldCheck, Sticker, CheckCircle, MessageSquare,
+  Bell, BellOff
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -34,8 +35,114 @@ export default function GlobalChat({
   const [isStickerOpen, setIsStickerOpen] = useState(false);
   const [showPinnedOnly, setShowPinnedOnly] = useState(false);
   const [errorBanner, setErrorBanner] = useState("");
+  const [chatNotification, setChatNotification] = useState<string | null>(null);
+  const [notisState, setNotisState] = useState(() => {
+    return localStorage.getItem("chat_notifications_enabled") === "true";
+  });
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const showLocalToast = (msg: string) => {
+    setChatNotification(msg);
+    setTimeout(() => {
+      setChatNotification(null);
+    }, 3500);
+  };
+
+  const playChatSound = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.type = "sine";
+      osc1.frequency.setValueAtTime(880, ctx.currentTime);
+      gain1.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc1.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.12);
+      
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.type = "sine";
+      osc2.frequency.setValueAtTime(1320, ctx.currentTime + 0.08);
+      gain2.gain.setValueAtTime(0.06, ctx.currentTime + 0.08);
+      gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+      osc2.start(ctx.currentTime + 0.08);
+      osc2.stop(ctx.currentTime + 0.22);
+    } catch (e) {
+      console.warn("Audio Context block or error:", e);
+    }
+  };
+
+  const handleToggleNotifications = async () => {
+    if (notisState) {
+      localStorage.setItem("chat_notifications_enabled", "false");
+      setNotisState(false);
+      showLocalToast("Notificaciones y sonidos desactivados 🔕");
+    } else {
+      const confirmEnable = window.confirm(
+        "Aviso de Notificaciones:\n\nPara recibir alertas visuales en tu pantalla y un sonido agradable cada vez que llegue un mensaje nuevo al chat global, necesitamos el permiso de tu navegador.\n\n¿Deseas activar las notificaciones y reproducir un sonido de prueba?"
+      );
+      if (confirmEnable) {
+        if ("Notification" in window) {
+          const permission = await Notification.requestPermission();
+          if (permission === "granted") {
+            localStorage.setItem("chat_notifications_enabled", "true");
+            setNotisState(true);
+            playChatSound();
+            showLocalToast("¡Notificaciones y sonido activados! 🔔");
+          } else {
+            alert("No se pudieron activar las notificaciones porque el permiso fue denegado en tu navegador. Por favor, actívalas manualmente en la configuración del sitio.");
+          }
+        } else {
+          localStorage.setItem("chat_notifications_enabled", "true");
+          setNotisState(true);
+          playChatSound();
+          showLocalToast("¡Sonido de chat activado! 🔊");
+        }
+      }
+    }
+  };
+
+  const prevLastMessageId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (prevLastMessageId.current === null) {
+        prevLastMessageId.current = lastMsg.id;
+        return;
+      }
+
+      if (lastMsg.id !== prevLastMessageId.current) {
+        const isSelf = (currentUser && lastMsg.userId === currentUser.id) || (currentAdmin && lastMsg.userId === "admin-" + currentAdmin.id);
+        if (!isSelf) {
+          if (localStorage.getItem("chat_notifications_enabled") === "true") {
+            playChatSound();
+            if ("Notification" in window && Notification.permission === "granted") {
+              const textContent = lastMsg.sticker ? "Envió un Sticker 🖼️" : lastMsg.text;
+              try {
+                new Notification(`MundoFarmeo - ${lastMsg.username}`, {
+                  body: textContent,
+                  icon: lastMsg.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${lastMsg.username}`
+                });
+              } catch (e) {
+                console.error("System notification error", e);
+              }
+            }
+          }
+        }
+        prevLastMessageId.current = lastMsg.id;
+      }
+    }
+  }, [messages, currentUser, currentAdmin]);
 
   // Poll chat every 3 seconds for persistent real-time chat feel
   useEffect(() => {
@@ -182,10 +289,10 @@ export default function GlobalChat({
     <div className="max-w-5xl mx-auto px-4 py-4" id="global-chat-room">
       
       {/* Outer Discord Container */}
-      <div className="glass-panel rounded-2xl overflow-hidden border border-white/5 flex flex-col h-[650px] shadow-2xl relative">
+      <div className="glass-panel rounded-2xl overflow-hidden border border-white/5 flex flex-col h-[480px] sm:h-[650px] shadow-2xl relative">
         
         {/* Chat Header */}
-        <div className="bg-zinc-900/80 px-6 py-4 border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 backdrop-blur-md z-10">
+        <div className="bg-zinc-900/80 px-6 py-4 border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 backdrop-blur-md z-10 relative">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping" />
             <MessageSquare className="w-5 h-5 text-blue-400" />
@@ -224,7 +331,36 @@ export default function GlobalChat({
               <Pin className="w-3.5 h-3.5" />
               {showPinnedOnly ? "Ver Todos" : "Fijados"}
             </button>
+
+            {/* Bell Notification Toggle */}
+            <button
+              onClick={handleToggleNotifications}
+              className={`px-3 py-1 rounded-full text-xs font-sans font-medium transition-all flex items-center gap-1 cursor-pointer border ${
+                notisState 
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" 
+                  : "bg-white/[0.02] text-white/55 border-white/5 hover:text-white"
+              }`}
+              title={notisState ? "Desactivar Notificaciones y Sonidos" : "Activar Notificaciones y Sonidos"}
+            >
+              {notisState ? <Bell className="w-3.5 h-3.5 text-emerald-400 animate-pulse" /> : <BellOff className="w-3.5 h-3.5 text-white/40" />}
+              <span>{notisState ? "Notis On" : "Notis Off"}</span>
+            </button>
           </div>
+
+          {/* Floating Toast inside container */}
+          <AnimatePresence>
+            {chatNotification && (
+              <motion.div
+                initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                className="absolute top-full right-4 mt-2 bg-zinc-900/95 border border-emerald-500/40 px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2 text-[11px] text-white z-50 backdrop-blur-md"
+              >
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-ping" />
+                <span className="font-medium">{chatNotification}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Messages Body */}
@@ -256,9 +392,9 @@ export default function GlobalChat({
                 >
                   {/* Left Avatar */}
                   <img
-                    src={`https://api.dicebear.com/7.x/pixel-art/svg?seed=${msg.username}`}
+                    src={msg.avatar || `https://api.dicebear.com/7.x/pixel-art/svg?seed=${msg.username}`}
                     alt={msg.username}
-                    className="w-10 h-10 rounded-lg bg-zinc-800 border border-white/10 flex-shrink-0 mt-0.5"
+                    className="w-10 h-10 rounded-lg bg-zinc-800 border border-white/10 flex-shrink-0 mt-0.5 object-cover"
                     referrerPolicy="no-referrer"
                   />
 

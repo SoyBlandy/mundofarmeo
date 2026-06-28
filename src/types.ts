@@ -27,6 +27,8 @@ export interface User {
   warns: number;
   ipHistory: string[];
   createdAt: string;
+  roleBadge?: string;
+  roleColor?: string;
 }
 
 export interface AdminCode {
@@ -36,6 +38,8 @@ export interface AdminCode {
   permissions: AdminPermissions;
   suspended: boolean;
   createdBy?: string;
+  roleBadge?: string;
+  roleColor?: string;
 }
 
 export interface CatalogItem {
@@ -112,6 +116,7 @@ export interface ChatMessage {
   roleBadge?: string; // "Admin" | "Mod" | "Super Admin" | null
   roleColor?: string;
   isStickerOnly?: boolean;
+  avatar?: string;
 }
 
 export interface AdBanner {
